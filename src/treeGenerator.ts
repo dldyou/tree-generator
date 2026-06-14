@@ -6,7 +6,7 @@ function generateNodeString(
     isLast: boolean,
 ): string {
     const connector = isLast ? '└── ' : '├── ';
-    const name = node.type === 'directory' ? '${node.name}/' : node.name;
+    const name = node.type === 'directory' ? `${node.name}/` : node.name;
 
     let result = `${prefix}${connector}${name}\n`;
 
