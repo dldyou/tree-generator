@@ -10,14 +10,15 @@ function generateNodeString(
 
     let result = `${prefix}${connector}${name}\n`;
 
-    if (node.children && node.children.length > 0) {
+    const includedChildren = node.children?.filter(child => !child.excluded) ?? [];
+    if (includedChildren.length > 0) {
         const nextPrefix = prefix + (isLast ? '    ' : '│   ');
 
-        node.children.forEach((child, index) => {
+        includedChildren.forEach((child, index) => {
             result += generateNodeString(
                 child,
                 nextPrefix,
-                index === node.children!.length - 1
+                index === includedChildren.length - 1
             );
         });
     }
@@ -28,15 +29,16 @@ function generateNodeString(
 export function generateTreeString(root: TreeNode): string {
     let result = `${root.name}/\n`;
 
-    if (!root.children) {
+    const includedChildren = root.children?.filter(child => !child.excluded) ?? [];
+    if (includedChildren.length === 0) {
         return result;
     }
 
-    root.children.forEach((child, index) => {
+    includedChildren.forEach((child, index) => {
         result += generateNodeString(
             child,
             '',
-            index === root.children!.length - 1
+            index === includedChildren.length - 1
         );
     });
 

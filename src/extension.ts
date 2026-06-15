@@ -1,20 +1,12 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 import { scanDirectory } from './scanner';
 import { generateTreeString } from './treeGenerator';
+import { reorderChildren, setNodeExcluded } from './treeOrdering';
+import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
+import { TreeNode } from './types';
+import { getTreeEditorHtml } from './webview';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
-
-    // Use the console to output diagnostic information (console.log) and errors (console.error)
-    // This line of code will only be executed once when your extension is activated
-    console.log('Congratulations, your extension "tree-generator" is now active!');
-
-    // The command has been defined in the package.json file
-    // Now provide the implementation of the command with registerCommand
-    // The commandId parameter must match the command field in package.json
     const disposable = vscode.commands.registerCommand('tree-generator.generateTree', async () => {
         const workspaceFolders = vscode.workspace.workspaceFolders;
 
@@ -24,14 +16,16 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         const rootPath = workspaceFolders[0].uri.fsPath;
+        const stateKey = `treeGenerator.treeState:${workspaceFolders[0].uri.toString()}`;
 
         try {
             const tree = await scanDirectory(rootPath);
-            const treeString = generateTreeString(tree);
-
-            await vscode.env.clipboard.writeText(treeString);
-
-            vscode.window.showInformationMessage('Directory tree copied to clipboard!');
+            const savedState = context.workspaceState.get<PersistedTreeState>(stateKey);
+            if (savedState?.version === 1) {
+                applyTreeState(tree, savedState);
+            }
+            await context.workspaceState.update(stateKey, captureTreeState(tree));
+            openTreeEditor(context, rootPath, stateKey, tree);
         } catch (error) {
             vscode.window.showErrorMessage(
                 `Failed to generate project tree: ${String(error)}`
@@ -42,5 +36,111 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
 }
 
-// This method is called when your extension is deactivated
+function openTreeEditor(
+    context: vscode.ExtensionContext,
+    rootPath: string,
+    stateKey: string,
+    initialTree: TreeNode,
+): void {
+    const panel = vscode.window.createWebviewPanel(
+        'treeGenerator.editor',
+        'Tree Generator',
+        vscode.ViewColumn.Beside,
+        {
+            enableScripts: true,
+            retainContextWhenHidden: true,
+        },
+    );
+
+    let tree = initialTree;
+
+    const saveTree = async (): Promise<void> => {
+        await context.workspaceState.update(stateKey, captureTreeState(tree));
+    };
+
+    const sendUpdate = async (status?: string): Promise<void> => {
+        await panel.webview.postMessage({
+            type: 'update',
+            tree,
+            treeString: generateTreeString(tree),
+            status,
+        });
+    };
+
+    const messageDisposable = panel.webview.onDidReceiveMessage(async message => {
+        try {
+            switch (message.type) {
+                case 'ready':
+                    await sendUpdate();
+                    break;
+                case 'reorder':
+                    if (
+                        typeof message.parentPath !== 'string'
+                        || !Array.isArray(message.orderedChildPaths)
+                        || !message.orderedChildPaths.every(
+                            (childPath: unknown) => typeof childPath === 'string',
+                        )
+                        || !reorderChildren(tree, message.parentPath, message.orderedChildPaths)
+                    ) {
+                        await sendUpdate();
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not apply that order.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await saveTree();
+                    await sendUpdate('Order updated');
+                    break;
+                case 'setExcluded':
+                    if (
+                        typeof message.nodePath !== 'string'
+                        || typeof message.excluded !== 'boolean'
+                        || !setNodeExcluded(tree, message.nodePath, message.excluded)
+                    ) {
+                        await sendUpdate();
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update that item.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await saveTree();
+                    await sendUpdate(
+                        message.excluded
+                            ? 'Item excluded from output'
+                            : 'Item included in output',
+                    );
+                    break;
+                case 'copy':
+                    await vscode.env.clipboard.writeText(generateTreeString(tree));
+                    await panel.webview.postMessage({
+                        type: 'status',
+                        text: 'Copied to clipboard',
+                    });
+                    break;
+                case 'reset':
+                    await context.workspaceState.update(stateKey, undefined);
+                    tree = await scanDirectory(rootPath);
+                    await sendUpdate('Default order restored');
+                    break;
+            }
+        } catch (error) {
+            await panel.webview.postMessage({
+                type: 'status',
+                text: `Failed: ${String(error)}`,
+                isError: true,
+            });
+        }
+    });
+
+    panel.onDidDispose(() => messageDisposable.dispose());
+    panel.webview.html = getTreeEditorHtml(panel.webview);
+    context.subscriptions.push(panel);
+}
+
 export function deactivate() { }
