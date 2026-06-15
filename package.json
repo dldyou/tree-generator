@@ -39,5 +39,7 @@
   },
   "dependencies": {
     "ignore": "^7.0.5"
-  }
+  },
+  "readme": "./README.md",
+  "publisher": "dldyou"
 }
