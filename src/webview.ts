@@ -174,10 +174,34 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .node-name {
             overflow: hidden;
-            flex: 1 1 auto;
+            flex: 0 1 auto;
+            max-width: 45%;
             padding-right: 8px;
             text-overflow: ellipsis;
             white-space: nowrap;
+        }
+
+        .description-input {
+            min-width: 80px;
+            flex: 1 1 180px;
+            height: 24px;
+            margin-right: 6px;
+            border: 1px solid transparent;
+            padding: 2px 6px;
+            color: var(--vscode-input-foreground);
+            background: transparent;
+            font-family: var(--vscode-font-family);
+        }
+
+        .description-input:hover,
+        .description-input:focus {
+            border-color: var(--vscode-input-border, var(--vscode-focusBorder));
+            outline: none;
+            background: var(--vscode-input-background);
+        }
+
+        .description-input::placeholder {
+            color: var(--vscode-input-placeholderForeground);
         }
 
         .node-actions {
@@ -230,7 +254,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         <button id="reset-button" class="secondary" type="button">Reset to default</button>
         <span id="status" class="status" role="status"></span>
     </div>
-    <p class="hint">Drag items to change their order, or exclude them from the output. Excluded items stay at the bottom and the filesystem is not modified.</p>
+    <p class="hint">Add descriptions, drag items to change their order, or exclude them from the output. Descriptions are aligned as # comments in the preview.</p>
     <main class="layout">
         <section class="panel">
             <h2 class="panel-heading">Order</h2>
@@ -346,6 +370,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             name.title = node.path;
             row.append(name);
 
+            row.append(createDescriptionInput(node));
+
             if (!isRoot) {
                 row.append(createNodeActions(item, node));
                 addDragHandlers(item);
@@ -356,6 +382,35 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             }
 
             return item;
+        }
+
+        function createDescriptionInput(node) {
+            const input = document.createElement('input');
+            input.className = 'description-input';
+            input.type = 'text';
+            input.value = node.description ?? '';
+            input.placeholder = 'Description';
+            input.title = 'Description shown in the generated tree';
+            input.draggable = false;
+            input.addEventListener('click', event => event.stopPropagation());
+            input.addEventListener('dragstart', event => {
+                event.preventDefault();
+                event.stopPropagation();
+            });
+            input.addEventListener('keydown', event => {
+                event.stopPropagation();
+                if (event.key === 'Enter') {
+                    input.blur();
+                }
+            });
+            input.addEventListener('change', () => {
+                vscode.postMessage({
+                    type: 'setDescription',
+                    nodePath: node.path,
+                    description: input.value,
+                });
+            });
+            return input;
         }
 
         function createChildrenList(parentNode) {
@@ -421,6 +476,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         function addDragHandlers(item) {
             item.addEventListener('dragstart', event => {
+                if (event.target instanceof HTMLInputElement) {
+                    event.preventDefault();
+                    return;
+                }
                 event.stopPropagation();
                 draggedItem = item;
                 draggedParentPath = item.parentElement.dataset.parentPath;

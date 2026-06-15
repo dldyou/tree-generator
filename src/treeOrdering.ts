@@ -84,3 +84,18 @@ export function setNodeExcluded(
     location.parent.children = siblings;
     return true;
 }
+
+export function setNodeDescription(
+    root: TreeNode,
+    nodePath: string,
+    description: string,
+): boolean {
+    const node = findNode(root, nodePath)?.node;
+    if (!node) {
+        return false;
+    }
+
+    const normalizedDescription = description.replace(/\s+/g, ' ').trim();
+    node.description = normalizedDescription || undefined;
+    return true;
+}

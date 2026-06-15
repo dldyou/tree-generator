@@ -9,6 +9,7 @@ export interface PersistedDirectoryState {
 export interface PersistedTreeState {
     version: 1;
     directories: Record<string, PersistedDirectoryState>;
+    descriptions?: Record<string, string>;
 }
 
 function relativePath(rootPath: string, nodePath: string): string {
@@ -24,9 +25,13 @@ function insertAlphabetically(nodes: TreeNode[], newNode: TreeNode): void {
 
 export function captureTreeState(root: TreeNode): PersistedTreeState {
     const directories: Record<string, PersistedDirectoryState> = {};
+    const descriptions: Record<string, string> = {};
 
     const visit = (directory: TreeNode): void => {
         const children = directory.children ?? [];
+        if (directory.description) {
+            descriptions[relativePath(root.path, directory.path)] = directory.description;
+        }
         directories[relativePath(root.path, directory.path)] = {
             order: children.map(child => relativePath(root.path, child.path)),
             excluded: children
@@ -34,20 +39,30 @@ export function captureTreeState(root: TreeNode): PersistedTreeState {
                 .map(child => relativePath(root.path, child.path)),
         };
 
-        children
-            .filter(child => child.type === 'directory')
-            .forEach(visit);
+        for (const child of children) {
+            if (child.description) {
+                descriptions[relativePath(root.path, child.path)] = child.description;
+            }
+            if (child.type === 'directory') {
+                visit(child);
+            }
+        }
     };
 
     visit(root);
-    return { version: 1, directories };
+    return { version: 1, directories, descriptions };
 }
 
 export function applyTreeState(
     root: TreeNode,
     state: PersistedTreeState,
 ): TreeNode {
+    const descriptions = state.descriptions ?? {};
+
     const visit = (directory: TreeNode): void => {
+        directory.description = descriptions[
+            relativePath(root.path, directory.path)
+        ];
         const children = directory.children ?? [];
         const directoryState = state.directories?.[
             relativePath(root.path, directory.path)
@@ -107,6 +122,7 @@ export function applyTreeState(
         }
 
         for (const child of directory.children ?? []) {
+            child.description = descriptions[relativePath(root.path, child.path)];
             if (child.type === 'directory') {
                 visit(child);
             }

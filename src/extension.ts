@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { scanDirectory } from './scanner';
 import { generateTreeString } from './treeGenerator';
-import { reorderChildren, setNodeExcluded } from './treeOrdering';
+import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
 import { TreeNode } from './types';
 import { getTreeEditorHtml } from './webview';
@@ -154,6 +154,24 @@ function openTreeEditor(
                             ? 'Item excluded from output'
                             : 'Item included in output',
                     );
+                    break;
+                case 'setDescription':
+                    if (
+                        typeof message.nodePath !== 'string'
+                        || typeof message.description !== 'string'
+                        || !setNodeDescription(tree, message.nodePath, message.description)
+                    ) {
+                        await sendUpdate();
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update that description.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await saveTree();
+                    await sendUpdate('Description updated');
                     break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(generateTreeString(tree));
