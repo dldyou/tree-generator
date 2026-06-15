@@ -15,7 +15,7 @@
     "commands": [
       {
         "command": "tree-generator.generateTree",
-        "title": "Tree Generator: Generate Tree"
+        "title": "Tree Generator: Open Tree Editor"
       }
     ]
   },
