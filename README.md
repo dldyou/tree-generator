@@ -30,7 +30,7 @@ tree-generator/              # VS Code extension
 ## Usage
 
 1. Open a workspace folder in VS Code.
-2. Open the Command Palette.
+2. `Ctrl + Shift + P` to Open the Command Palette.
 3. Run `Tree Generator: Open Tree Editor`.
 4. Add descriptions, arrange entries, or exclude them in the left panel.
 5. Review the generated ASCII tree in the preview panel.
