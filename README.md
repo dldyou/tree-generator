@@ -1,76 +1,73 @@
-# tree-generator README
+# Tree Generator
 
-This is the README for your extension "tree-generator". After writing up a brief description, we recommend including the following sections.
+Tree Generator is a VS Code extension for creating an ASCII project tree for documents such as `README.md`.
+
+It starts with a directory-first, alphabetical layout and provides a Webview editor where files and folders can be reordered or excluded without modifying the filesystem.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+- Generates an ASCII tree from the current workspace.
+- Sorts directories first, then sorts entries alphabetically by default.
+- Reorders sibling files and folders using drag and drop or move buttons.
+- Shows a live ASCII tree preview while editing.
+- Excludes files and folders from the generated output.
+- Keeps excluded entries visible, dimmed, and at the bottom of their directory.
+- Copies the edited ASCII tree to the clipboard.
+- Restores the default scanned order with `Reset to default`.
 
-For example if there is an image subfolder under your extension project workspace:
+Example output:
 
-\!\[feature X\]\(images/feature-x.png\)
+```text
+tree-generator/
+├── src/
+│   ├── extension.ts
+│   └── treeGenerator.ts
+├── package.json
+└── README.md
+```
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## Usage
+
+1. Open a workspace folder in VS Code.
+2. Open the Command Palette.
+3. Run `Tree Generator: Open Tree Editor`.
+4. Arrange or exclude entries in the left panel.
+5. Review the generated ASCII tree in the preview panel.
+6. Select `Copy tree` and paste it into your document.
+
+Reordering and exclusion choices are stored for the workspace and restored when the editor is opened again.
+
+When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
 
 ## Scan Exclusions
 
-Tree Generator applies root and nested `.gitignore` rules while scanning. Git metadata directories named `.git` are always excluded.
-Open tree editors automatically refresh when a `.gitignore` file is created, changed, or deleted.
+Tree Generator applies root and nested `.gitignore` rules while scanning.
+
+- `.gitignore` negation patterns such as `!keep.log` are supported.
+- Git metadata directories named `.git` are always excluded.
+- Open Tree Generator editors automatically refresh when a `.gitignore` file is created, changed, or deleted.
+- Manual exclusions made in the Webview are separate from `.gitignore` rules.
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+- VS Code `1.120.0` or later.
+- An open workspace folder.
 
 ## Extension Settings
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+Tree Generator does not currently contribute any VS Code settings.
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- In a multi-root workspace, Tree Generator currently scans the first workspace folder.
+- General filesystem changes are reflected the next time the Tree Editor is opened. Only `.gitignore` changes trigger an automatic refresh while the editor is open.
+- Ordering and exclusion state is stored in VS Code workspace state rather than a project file.
 
 ## Release Notes
 
-Users appreciate release notes as you update your extension.
+### 0.0.1
 
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- Added the visual Tree Editor and live ASCII preview.
+- Added drag-and-drop ordering and manual exclusions.
+- Added workspace-specific ordering and exclusion persistence.
+- Added root and nested `.gitignore` support with automatic refresh.
