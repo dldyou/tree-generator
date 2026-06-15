@@ -53,6 +53,7 @@ function openTreeEditor(
     );
 
     let tree = initialTree;
+    let refreshTimer: NodeJS.Timeout | undefined;
 
     const saveTree = async (): Promise<void> => {
         await context.workspaceState.update(stateKey, captureTreeState(tree));
@@ -66,6 +67,44 @@ function openTreeEditor(
             status,
         });
     };
+
+    const refreshFromGitignore = async (): Promise<void> => {
+        try {
+            const refreshedTree = await scanDirectory(rootPath);
+            const savedState = context.workspaceState.get<PersistedTreeState>(stateKey);
+            if (savedState?.version === 1) {
+                applyTreeState(refreshedTree, savedState);
+            }
+
+            tree = refreshedTree;
+            await sendUpdate('.gitignore changed; tree refreshed');
+        } catch (error) {
+            await panel.webview.postMessage({
+                type: 'status',
+                text: `Failed to refresh tree: ${String(error)}`,
+                isError: true,
+            });
+        }
+    };
+
+    const scheduleGitignoreRefresh = (): void => {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+        }
+        refreshTimer = setTimeout(() => {
+            refreshTimer = undefined;
+            void refreshFromGitignore();
+        }, 150);
+    };
+
+    const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(rootPath, '**/.gitignore'),
+    );
+    const watcherDisposables = [
+        gitignoreWatcher.onDidCreate(scheduleGitignoreRefresh),
+        gitignoreWatcher.onDidChange(scheduleGitignoreRefresh),
+        gitignoreWatcher.onDidDelete(scheduleGitignoreRefresh),
+    ];
 
     const messageDisposable = panel.webview.onDidReceiveMessage(async message => {
         try {
@@ -138,7 +177,14 @@ function openTreeEditor(
         }
     });
 
-    panel.onDidDispose(() => messageDisposable.dispose());
+    panel.onDidDispose(() => {
+        if (refreshTimer) {
+            clearTimeout(refreshTimer);
+        }
+        messageDisposable.dispose();
+        watcherDisposables.forEach(disposable => disposable.dispose());
+        gitignoreWatcher.dispose();
+    });
     panel.webview.html = getTreeEditorHtml(panel.webview);
     context.subscriptions.push(panel);
 }

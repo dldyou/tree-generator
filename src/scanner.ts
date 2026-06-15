@@ -1,18 +1,65 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import ignore = require('ignore');
 import { TreeNode } from './types';
 
-const DEFAULT_EXCLUDE_DIRS = [
-    '.git',
-    'node_modules',
-    'dist',
-    'build',
-    'out',
-    '.vscode',
-];
+interface IgnoreScope {
+    basePath: string;
+    matcher: ignore.Ignore;
+}
 
-export async function scanDirectory(dirPath: string): Promise<TreeNode> {
+async function loadIgnoreScopes(
+    dirPath: string,
+    inheritedScopes: IgnoreScope[],
+): Promise<IgnoreScope[]> {
+    try {
+        const patterns = await fs.readFile(path.join(dirPath, '.gitignore'), 'utf8');
+        return [
+            ...inheritedScopes,
+            {
+                basePath: dirPath,
+                matcher: ignore().add(patterns),
+            },
+        ];
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return inheritedScopes;
+        }
+        throw error;
+    }
+}
+
+function isIgnored(
+    entryPath: string,
+    isDirectory: boolean,
+    scopes: IgnoreScope[],
+): boolean {
+    let ignored = false;
+
+    for (const scope of scopes) {
+        const relativeEntryPath = path.relative(scope.basePath, entryPath)
+            .split(path.sep)
+            .join('/');
+        const result = scope.matcher.test(
+            isDirectory ? `${relativeEntryPath}/` : relativeEntryPath,
+        );
+
+        if (result.ignored) {
+            ignored = true;
+        } else if (result.unignored) {
+            ignored = false;
+        }
+    }
+
+    return ignored;
+}
+
+async function scanDirectoryWithScopes(
+    dirPath: string,
+    inheritedScopes: IgnoreScope[],
+): Promise<TreeNode> {
     const name = path.basename(dirPath);
+    const scopes = await loadIgnoreScopes(dirPath, inheritedScopes);
 
     const root: TreeNode = {
         name,
@@ -23,7 +70,15 @@ export async function scanDirectory(dirPath: string): Promise<TreeNode> {
 
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
     const filteredEntries = entries.filter(entry => {
-        return !DEFAULT_EXCLUDE_DIRS.includes(entry.name);
+        if (entry.name === '.git') {
+            return false;
+        }
+
+        return !isIgnored(
+            path.join(dirPath, entry.name),
+            entry.isDirectory(),
+            scopes,
+        );
     });
 
     filteredEntries.sort((a, b) => {
@@ -36,7 +91,7 @@ export async function scanDirectory(dirPath: string): Promise<TreeNode> {
     for (const entry of filteredEntries) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-            const childNode = await scanDirectory(fullPath);
+            const childNode = await scanDirectoryWithScopes(fullPath, scopes);
             root.children!.push(childNode);
         } else if (entry.isFile()) {
             root.children!.push({
@@ -48,4 +103,8 @@ export async function scanDirectory(dirPath: string): Promise<TreeNode> {
     }
 
     return root;
+}
+
+export async function scanDirectory(dirPath: string): Promise<TreeNode> {
+    return scanDirectoryWithScopes(dirPath, []);
 }
