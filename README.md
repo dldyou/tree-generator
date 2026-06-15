@@ -9,6 +9,7 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 - Generates an ASCII tree from the current workspace.
 - Sorts directories first, then sorts entries alphabetically by default.
 - Reorders sibling files and folders using drag and drop or move buttons.
+- Adds descriptions to files and folders as aligned `# description` comments.
 - Shows a live ASCII tree preview while editing.
 - Excludes files and folders from the generated output.
 - Keeps excluded entries visible, dimmed, and at the bottom of their directory.
@@ -18,11 +19,11 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 Example output:
 
 ```text
-tree-generator/
-├── src/
-│   ├── extension.ts
-│   └── treeGenerator.ts
-├── package.json
+tree-generator/              # VS Code extension
+├── src/                     # Extension source
+│   ├── extension.ts         # Extension entry point
+│   └── treeGenerator.ts     # ASCII tree generator
+├── package.json             # Extension manifest
 └── README.md
 ```
 
@@ -31,11 +32,11 @@ tree-generator/
 1. Open a workspace folder in VS Code.
 2. Open the Command Palette.
 3. Run `Tree Generator: Open Tree Editor`.
-4. Arrange or exclude entries in the left panel.
+4. Add descriptions, arrange entries, or exclude them in the left panel.
 5. Review the generated ASCII tree in the preview panel.
 6. Select `Copy tree` and paste it into your document.
 
-Reordering and exclusion choices are stored for the workspace and restored when the editor is opened again.
+Descriptions, ordering, and exclusion choices are stored for the workspace and restored when the editor is opened again.
 
 When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
 
