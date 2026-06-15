@@ -1,9 +1,12 @@
 import * as assert from 'assert';
+import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
 
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from 'vscode';
+import { scanDirectory } from '../scanner';
 import { generateTreeString } from '../treeGenerator';
 import { reorderChildren, setNodeExcluded } from '../treeOrdering';
 import { applyTreeState, captureTreeState } from '../treeState';
@@ -279,5 +282,93 @@ suite('Extension Test Suite', () => {
 			rescanned.children?.[0].children?.map(child => child.name),
 			['z.ts', 'a.ts'],
 		);
+	});
+
+	test('Scans according to the root .gitignore', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, '.gitignore'),
+				'node_modules/\n*.log\n',
+			);
+			await fs.mkdir(path.join(rootPath, 'node_modules'));
+			await fs.mkdir(path.join(rootPath, 'out'));
+			await fs.writeFile(path.join(rootPath, 'debug.log'), '');
+			await fs.writeFile(path.join(rootPath, 'out', 'generated.js'), '');
+
+			const tree = await scanDirectory(rootPath);
+
+			assert.deepStrictEqual(
+				tree.children?.map(child => child.name),
+				['out', '.gitignore'],
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Applies nested .gitignore negation patterns', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const srcPath = path.join(rootPath, 'src');
+
+		try {
+			await fs.writeFile(path.join(rootPath, '.gitignore'), '*.log\n');
+			await fs.mkdir(srcPath);
+			await fs.writeFile(path.join(srcPath, '.gitignore'), '!keep.log\n');
+			await fs.writeFile(path.join(srcPath, 'drop.log'), '');
+			await fs.writeFile(path.join(srcPath, 'keep.log'), '');
+
+			const tree = await scanDirectory(rootPath);
+
+			assert.deepStrictEqual(
+				tree.children?.find(child => child.name === 'src')?.children
+					?.map(child => child.name),
+				['.gitignore', 'keep.log'],
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Only excludes .git when no .gitignore rules exist', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.mkdir(path.join(rootPath, '.git'));
+			await fs.mkdir(path.join(rootPath, 'dist'));
+			await fs.mkdir(path.join(rootPath, 'node_modules'));
+
+			const tree = await scanDirectory(rootPath);
+
+			assert.deepStrictEqual(
+				tree.children?.map(child => child.name),
+				['dist', 'node_modules'],
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Reflects updated and deleted .gitignore rules when rescanned', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const gitignorePath = path.join(rootPath, '.gitignore');
+
+		try {
+			await fs.writeFile(path.join(rootPath, 'debug.log'), '');
+
+			let tree = await scanDirectory(rootPath);
+			assert.ok(tree.children?.some(child => child.name === 'debug.log'));
+
+			await fs.writeFile(gitignorePath, '*.log\n');
+			tree = await scanDirectory(rootPath);
+			assert.ok(!tree.children?.some(child => child.name === 'debug.log'));
+
+			await fs.rm(gitignorePath);
+			tree = await scanDirectory(rootPath);
+			assert.ok(tree.children?.some(child => child.name === 'debug.log'));
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
 	});
 });
