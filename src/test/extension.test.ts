@@ -8,7 +8,11 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { scanDirectory } from '../scanner';
 import { generateTreeString } from '../treeGenerator';
-import { reorderChildren, setNodeExcluded } from '../treeOrdering';
+import {
+	reorderChildren,
+	setNodeDescription,
+	setNodeExcluded,
+} from '../treeOrdering';
 import { applyTreeState, captureTreeState } from '../treeState';
 import { TreeNode } from '../types';
 
@@ -135,6 +139,98 @@ suite('Extension Test Suite', () => {
 			tree.children?.map(child => child.name),
 			['package.json', 'README.md', 'dist'],
 		);
+	});
+
+	test('Aligns node descriptions as comments in generated output', () => {
+		const tree: TreeNode = {
+			name: 'root',
+			path: '/root',
+			type: 'directory',
+			description: 'project root',
+			children: [
+				{
+					name: 'src',
+					path: '/root/src',
+					type: 'directory',
+					description: 'source files',
+					children: [
+						{
+							name: 'index.ts',
+							path: '/root/src/index.ts',
+							type: 'file',
+							description: 'entry point',
+						},
+					],
+				},
+				{ name: 'README.md', path: '/root/README.md', type: 'file' },
+			],
+		};
+
+		const linesWithDescriptions = generateTreeString(tree)
+			.trimEnd()
+			.split('\n')
+			.filter(line => line.includes('# '));
+
+		assert.deepStrictEqual(
+			linesWithDescriptions.map(line => line.indexOf('# ')),
+			[20, 20, 20],
+		);
+		assert.ok(linesWithDescriptions[0].endsWith('# project root'));
+		assert.ok(linesWithDescriptions[2].endsWith('# entry point'));
+	});
+
+	test('Aligns descriptions when node names contain wide characters', () => {
+		const tree: TreeNode = {
+			name: 'root',
+			path: '/root',
+			type: 'directory',
+			description: 'root',
+			children: [
+				{
+					name: '한글.ts',
+					path: '/root/한글.ts',
+					type: 'file',
+					description: 'wide name',
+				},
+				{
+					name: 'english.ts',
+					path: '/root/english.ts',
+					type: 'file',
+					description: 'ascii name',
+				},
+			],
+		};
+
+		const lines = generateTreeString(tree).trimEnd().split('\n');
+		const commentVisualColumns = lines.map(line => {
+			const beforeComment = line.slice(0, line.indexOf('# '));
+			return Array.from(beforeComment).reduce((width, character) => {
+				return width + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3]/u.test(character)
+					? 2
+					: 1);
+			}, 0);
+		});
+
+		assert.deepStrictEqual(commentVisualColumns, [16, 16, 16]);
+	});
+
+	test('Updates and normalizes node descriptions', () => {
+		const tree: TreeNode = {
+			name: 'root',
+			path: '/root',
+			type: 'directory',
+			children: [
+				{ name: 'README.md', path: '/root/README.md', type: 'file' },
+			],
+		};
+
+		assert.strictEqual(
+			setNodeDescription(tree, '/root/README.md', '  project   overview  '),
+			true,
+		);
+		assert.strictEqual(tree.children?.[0].description, 'project overview');
+		assert.strictEqual(setNodeDescription(tree, '/root/README.md', ' '), true);
+		assert.strictEqual(tree.children?.[0].description, undefined);
 	});
 
 	test('Restores custom order and exclusions from persisted state', () => {
@@ -281,6 +377,41 @@ suite('Extension Test Suite', () => {
 		assert.deepStrictEqual(
 			rescanned.children?.[0].children?.map(child => child.name),
 			['z.ts', 'a.ts'],
+		);
+	});
+
+	test('Restores persisted descriptions', () => {
+		const rootPath = path.join('C:', 'workspace', 'project');
+		const original: TreeNode = {
+			name: 'project',
+			path: rootPath,
+			type: 'directory',
+			description: 'project root',
+			children: [{
+				name: 'README.md',
+				path: path.join(rootPath, 'README.md'),
+				type: 'file',
+				description: 'project overview',
+			}],
+		};
+		const state = captureTreeState(original);
+		const rescanned: TreeNode = {
+			name: 'project',
+			path: rootPath,
+			type: 'directory',
+			children: [{
+				name: 'README.md',
+				path: path.join(rootPath, 'README.md'),
+				type: 'file',
+			}],
+		};
+
+		applyTreeState(rescanned, state);
+
+		assert.strictEqual(rescanned.description, 'project root');
+		assert.strictEqual(
+			rescanned.children?.[0].description,
+			'project overview',
 		);
 	});
 
