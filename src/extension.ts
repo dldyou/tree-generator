@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { scanDirectory } from './scanner';
 import { generateTreeString } from './treeGenerator';
@@ -54,6 +55,7 @@ function openTreeEditor(
 
     let tree = initialTree;
     let refreshTimer: NodeJS.Timeout | undefined;
+    let pendingRefreshStatus = 'Tree refreshed';
 
     const saveTree = async (): Promise<void> => {
         await context.workspaceState.update(stateKey, captureTreeState(tree));
@@ -68,7 +70,7 @@ function openTreeEditor(
         });
     };
 
-    const refreshFromGitignore = async (): Promise<void> => {
+    const refreshFromFileSystem = async (status: string): Promise<void> => {
         try {
             const refreshedTree = await scanDirectory(rootPath);
             const savedState = context.workspaceState.get<PersistedTreeState>(stateKey);
@@ -77,7 +79,7 @@ function openTreeEditor(
             }
 
             tree = refreshedTree;
-            await sendUpdate('.gitignore changed; tree refreshed');
+            await sendUpdate(status);
         } catch (error) {
             await panel.webview.postMessage({
                 type: 'status',
@@ -87,23 +89,37 @@ function openTreeEditor(
         }
     };
 
-    const scheduleGitignoreRefresh = (): void => {
+    const scheduleRefresh = (status: string): void => {
+        pendingRefreshStatus = status;
         if (refreshTimer) {
             clearTimeout(refreshTimer);
         }
         refreshTimer = setTimeout(() => {
             refreshTimer = undefined;
-            void refreshFromGitignore();
+            void refreshFromFileSystem(pendingRefreshStatus);
         }, 150);
+    };
+
+    const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
+        if (path.basename(uri.fsPath) === '.gitignore') {
+            return;
+        }
+
+        scheduleRefresh('Workspace files changed; tree refreshed');
     };
 
     const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(rootPath, '**/.gitignore'),
     );
+    const fileTreeWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(rootPath, '**/*'),
+    );
     const watcherDisposables = [
-        gitignoreWatcher.onDidCreate(scheduleGitignoreRefresh),
-        gitignoreWatcher.onDidChange(scheduleGitignoreRefresh),
-        gitignoreWatcher.onDidDelete(scheduleGitignoreRefresh),
+        gitignoreWatcher.onDidCreate(() => scheduleRefresh('.gitignore changed; tree refreshed')),
+        gitignoreWatcher.onDidChange(() => scheduleRefresh('.gitignore changed; tree refreshed')),
+        gitignoreWatcher.onDidDelete(() => scheduleRefresh('.gitignore changed; tree refreshed')),
+        fileTreeWatcher.onDidCreate(scheduleFileTreeRefresh),
+        fileTreeWatcher.onDidDelete(scheduleFileTreeRefresh),
     ];
 
     const messageDisposable = panel.webview.onDidReceiveMessage(async message => {
@@ -202,6 +218,7 @@ function openTreeEditor(
         messageDisposable.dispose();
         watcherDisposables.forEach(disposable => disposable.dispose());
         gitignoreWatcher.dispose();
+        fileTreeWatcher.dispose();
     });
     panel.webview.html = getTreeEditorHtml(panel.webview);
     context.subscriptions.push(panel);

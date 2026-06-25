@@ -2,7 +2,7 @@
   "name": "tree-generator-dldyou",
   "displayName": "Tree Generator",
   "description": "Generate project tree for README.md",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "engines": {
     "vscode": "^1.120.0"
   },
