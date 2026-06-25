@@ -13,6 +13,7 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 - Shows a live ASCII tree preview while editing.
 - Excludes files and folders from the generated output.
 - Keeps excluded entries visible, dimmed, and at the bottom of their directory.
+- Refreshes open editors when files or folders are created or deleted.
 - Copies the edited ASCII tree to the clipboard.
 - Restores the default scanned order with `Reset to default`.
 
@@ -47,6 +48,7 @@ Tree Generator applies root and nested `.gitignore` rules while scanning.
 - `.gitignore` negation patterns such as `!keep.log` are supported.
 - Git metadata directories named `.git` are always excluded.
 - Open Tree Generator editors automatically refresh when a `.gitignore` file is created, changed, or deleted.
+- Open Tree Generator editors also refresh when files or folders are created or deleted.
 - Manual exclusions made in the Webview are separate from `.gitignore` rules.
 
 ## Requirements
@@ -61,7 +63,7 @@ Tree Generator does not currently contribute any VS Code settings.
 ## Known Issues
 
 - In a multi-root workspace, Tree Generator currently scans the first workspace folder.
-- General filesystem changes are reflected the next time the Tree Editor is opened. Only `.gitignore` changes trigger an automatic refresh while the editor is open.
+- File content-only edits do not trigger a tree refresh because they do not change the project structure.
 - Ordering and exclusion state is stored in VS Code workspace state rather than a project file.
 
 ## Release Notes
@@ -72,3 +74,7 @@ Tree Generator does not currently contribute any VS Code settings.
 - Added drag-and-drop ordering and manual exclusions.
 - Added workspace-specific ordering and exclusion persistence.
 - Added root and nested `.gitignore` support with automatic refresh.
+
+### 0.1.0
+
+- Added detection of created and deleted files and folders.
