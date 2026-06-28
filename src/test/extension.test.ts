@@ -6,6 +6,12 @@ import * as path from 'path';
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from 'vscode';
+import {
+	README_TREE_END_MARKER,
+	README_TREE_START_MARKER,
+	replaceReadmeTreeBlock,
+	updateReadmeTreeBlock,
+} from '../readmeUpdater';
 import { scanDirectory } from '../scanner';
 import {
 	deleteTreeStateFile,
@@ -462,6 +468,73 @@ suite('Extension Test Suite', () => {
 			await deleteTreeStateFile(rootPath);
 
 			assert.strictEqual(await loadTreeStateFile(rootPath), undefined);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Replaces README tree marker block', () => {
+		const readme = [
+			'# Project',
+			'',
+			README_TREE_START_MARKER,
+			'old tree',
+			README_TREE_END_MARKER,
+			'',
+			'End.',
+		].join('\n');
+
+		const result = replaceReadmeTreeBlock(readme, 'root/\n└── src/\n');
+
+		assert.strictEqual(result.found, true);
+		assert.strictEqual(
+			result.content,
+			[
+				'# Project',
+				'',
+				README_TREE_START_MARKER,
+				'```text',
+				'root/',
+				'└── src/',
+				'```',
+				README_TREE_END_MARKER,
+				'',
+				'End.',
+			].join('\n'),
+		);
+	});
+
+	test('Leaves README unchanged when tree markers are missing', () => {
+		const readme = '# Project\n\nNo generated tree yet.\n';
+		const result = replaceReadmeTreeBlock(readme, 'root/\n');
+
+		assert.strictEqual(result.found, false);
+		assert.strictEqual(result.content, readme);
+	});
+
+	test('Updates README tree marker block on disk', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const readmePath = path.join(rootPath, 'README.md');
+
+		try {
+			await fs.writeFile(
+				readmePath,
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'placeholder',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			const result = await updateReadmeTreeBlock(rootPath, 'root/\n└── README.md\n');
+
+			assert.deepStrictEqual(result, { found: true, updated: true });
+			assert.ok(
+				(await fs.readFile(readmePath, 'utf8')).includes('└── README.md'),
+			);
 		} finally {
 			await fs.rm(rootPath, { recursive: true, force: true });
 		}

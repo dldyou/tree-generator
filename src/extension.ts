@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { updateReadmeTreeBlock } from './readmeUpdater';
 import { scanDirectory } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
 import { generateTreeString } from './treeGenerator';
@@ -82,12 +83,29 @@ function openTreeEditor(
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
+        const treeString = generateTreeString(tree);
+        let readmeUpdateError: string | undefined;
+
+        try {
+            await updateReadmeTreeBlock(rootPath, treeString);
+        } catch (error) {
+            readmeUpdateError = `Failed to update README.md: ${String(error)}`;
+        }
+
         await panel.webview.postMessage({
             type: 'update',
             tree,
-            treeString: generateTreeString(tree),
+            treeString,
             status,
         });
+
+        if (readmeUpdateError) {
+            await panel.webview.postMessage({
+                type: 'status',
+                text: readmeUpdateError,
+                isError: true,
+            });
+        }
     };
 
     const refreshFromFileSystem = async (status: string): Promise<void> => {
