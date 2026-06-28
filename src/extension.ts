@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { scanDirectory } from './scanner';
+import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
 import { generateTreeString } from './treeGenerator';
 import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
@@ -21,11 +22,10 @@ export function activate(context: vscode.ExtensionContext) {
 
         try {
             const tree = await scanDirectory(rootPath);
-            const savedState = context.workspaceState.get<PersistedTreeState>(stateKey);
+            const savedState = await loadSavedTreeState(context, rootPath, stateKey);
             if (savedState?.version === 1) {
                 applyTreeState(tree, savedState);
             }
-            await context.workspaceState.update(stateKey, captureTreeState(tree));
             openTreeEditor(context, rootPath, stateKey, tree);
         } catch (error) {
             vscode.window.showErrorMessage(
@@ -35,6 +35,26 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(disposable);
+}
+
+async function loadSavedTreeState(
+    context: vscode.ExtensionContext,
+    rootPath: string,
+    stateKey: string,
+): Promise<PersistedTreeState | undefined> {
+    const projectState = await loadTreeStateFile(rootPath);
+    if (projectState) {
+        return projectState;
+    }
+
+    const workspaceState = context.workspaceState.get<PersistedTreeState>(stateKey);
+    if (workspaceState?.version === 1) {
+        await saveTreeStateFile(rootPath, workspaceState);
+        await context.workspaceState.update(stateKey, undefined);
+        return workspaceState;
+    }
+
+    return undefined;
 }
 
 function openTreeEditor(
@@ -58,7 +78,7 @@ function openTreeEditor(
     let pendingRefreshStatus = 'Tree refreshed';
 
     const saveTree = async (): Promise<void> => {
-        await context.workspaceState.update(stateKey, captureTreeState(tree));
+        await saveTreeStateFile(rootPath, captureTreeState(tree));
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
@@ -73,7 +93,7 @@ function openTreeEditor(
     const refreshFromFileSystem = async (status: string): Promise<void> => {
         try {
             const refreshedTree = await scanDirectory(rootPath);
-            const savedState = context.workspaceState.get<PersistedTreeState>(stateKey);
+            const savedState = await loadTreeStateFile(rootPath);
             if (savedState?.version === 1) {
                 applyTreeState(refreshedTree, savedState);
             }
@@ -197,6 +217,7 @@ function openTreeEditor(
                     });
                     break;
                 case 'reset':
+                    await deleteTreeStateFile(rootPath);
                     await context.workspaceState.update(stateKey, undefined);
                     tree = await scanDirectory(rootPath);
                     await sendUpdate('Default order restored');

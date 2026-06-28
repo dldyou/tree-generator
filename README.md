@@ -37,7 +37,7 @@ tree-generator/              # VS Code extension
 5. Review the generated ASCII tree in the preview panel.
 6. Select `Copy tree` and paste it into your document.
 
-Descriptions, ordering, and exclusion choices are stored for the workspace and restored when the editor is opened again.
+Descriptions, ordering, and exclusion choices are stored in `.tree-generator.json` and restored when the editor is opened again.
 
 When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
 
@@ -64,7 +64,7 @@ Tree Generator does not currently contribute any VS Code settings.
 
 - In a multi-root workspace, Tree Generator currently scans the first workspace folder.
 - File content-only edits do not trigger a tree refresh because they do not change the project structure.
-- Ordering and exclusion state is stored in VS Code workspace state rather than a project file.
+- `.tree-generator.json` should be committed if you want to share tree metadata with collaborators.
 
 ## Release Notes
 
