@@ -14,6 +14,7 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 - Excludes files and folders from the generated output.
 - Keeps excluded entries visible, dimmed, and at the bottom of their directory.
 - Refreshes open editors when files or folders are created or deleted.
+- Updates marked README tree blocks automatically when the tree changes.
 - Copies the edited ASCII tree to the clipboard.
 - Restores the default scanned order with `Reset to default`.
 
@@ -37,9 +38,22 @@ tree-generator/              # VS Code extension
 5. Review the generated ASCII tree in the preview panel.
 6. Select `Copy tree` and paste it into your document.
 
-Descriptions, ordering, and exclusion choices are stored for the workspace and restored when the editor is opened again.
+Descriptions, ordering, and exclusion choices are stored in `.tree-generator.json` and restored when the editor is opened again.
 
 When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
+
+To let Tree Generator update `README.md` automatically, add a marked block. The marker comments are escaped below so this README is not treated as the generated block; remove the leading backslashes when adding the block to your document.
+
+````md
+\<!-- tree-generator:start -->
+```text
+tree-generator/
+└── README.md
+```
+\<!-- tree-generator:end -->
+````
+
+Only the content between these markers is replaced.
 
 ## Scan Exclusions
 
@@ -56,6 +70,20 @@ Tree Generator applies root and nested `.gitignore` rules while scanning.
 - VS Code `1.120.0` or later.
 - An open workspace folder.
 
+## CLI
+
+The extension also provides a CLI after the package is installed or linked:
+
+```sh
+tree-generator print
+tree-generator write
+tree-generator check
+```
+
+- `print` writes the generated tree to stdout.
+- `write` updates the marked `README.md` tree block.
+- `check` exits with code `1` when the marked `README.md` tree block is missing or out of date.
+
 ## Extension Settings
 
 Tree Generator does not currently contribute any VS Code settings.
@@ -64,7 +92,7 @@ Tree Generator does not currently contribute any VS Code settings.
 
 - In a multi-root workspace, Tree Generator currently scans the first workspace folder.
 - File content-only edits do not trigger a tree refresh because they do not change the project structure.
-- Ordering and exclusion state is stored in VS Code workspace state rather than a project file.
+- `.tree-generator.json` should be committed if you want to share tree metadata with collaborators.
 
 ## Release Notes
 

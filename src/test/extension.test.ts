@@ -6,7 +6,21 @@ import * as path from 'path';
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from 'vscode';
+import { runCli } from '../cli';
+import {
+	checkReadmeTreeBlock,
+	README_TREE_END_MARKER,
+	README_TREE_START_MARKER,
+	replaceReadmeTreeBlock,
+	updateReadmeTreeBlock,
+} from '../readmeUpdater';
 import { scanDirectory } from '../scanner';
+import {
+	deleteTreeStateFile,
+	loadTreeStateFile,
+	TREE_METADATA_FILE_NAME,
+	saveTreeStateFile,
+} from '../treeMetaStore';
 import { generateTreeString } from '../treeGenerator';
 import {
 	reorderChildren,
@@ -413,6 +427,196 @@ suite('Extension Test Suite', () => {
 			rescanned.children?.[0].description,
 			'project overview',
 		);
+	});
+
+	test('Saves and loads tree metadata from the project file', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const state = captureTreeState({
+			name: 'project',
+			path: rootPath,
+			type: 'directory',
+			description: 'project root',
+			children: [{
+				name: 'README.md',
+				path: path.join(rootPath, 'README.md'),
+				type: 'file',
+				excluded: true,
+				description: 'project overview',
+			}],
+		});
+
+		try {
+			await saveTreeStateFile(rootPath, state);
+
+			const loadedState = await loadTreeStateFile(rootPath);
+			assert.deepStrictEqual(loadedState, state);
+			assert.ok(
+				await fs.stat(path.join(rootPath, TREE_METADATA_FILE_NAME)),
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Deletes tree metadata project file', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await saveTreeStateFile(rootPath, {
+				version: 1,
+				directories: {},
+				descriptions: {},
+			});
+			await deleteTreeStateFile(rootPath);
+
+			assert.strictEqual(await loadTreeStateFile(rootPath), undefined);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Replaces README tree marker block', () => {
+		const readme = [
+			'# Project',
+			'',
+			README_TREE_START_MARKER,
+			'old tree',
+			README_TREE_END_MARKER,
+			'',
+			'End.',
+		].join('\n');
+
+		const result = replaceReadmeTreeBlock(readme, 'root/\n└── src/\n');
+
+		assert.strictEqual(result.found, true);
+		assert.strictEqual(
+			result.content,
+			[
+				'# Project',
+				'',
+				README_TREE_START_MARKER,
+				'```text',
+				'root/',
+				'└── src/',
+				'```',
+				README_TREE_END_MARKER,
+				'',
+				'End.',
+			].join('\n'),
+		);
+	});
+
+	test('Leaves README unchanged when tree markers are missing', () => {
+		const readme = '# Project\n\nNo generated tree yet.\n';
+		const result = replaceReadmeTreeBlock(readme, 'root/\n');
+
+		assert.strictEqual(result.found, false);
+		assert.strictEqual(result.content, readme);
+	});
+
+	test('Updates README tree marker block on disk', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const readmePath = path.join(rootPath, 'README.md');
+
+		try {
+			await fs.writeFile(
+				readmePath,
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'placeholder',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			const result = await updateReadmeTreeBlock(rootPath, 'root/\n└── README.md\n');
+
+			assert.deepStrictEqual(result, { found: true, updated: true });
+			assert.ok(
+				(await fs.readFile(readmePath, 'utf8')).includes('└── README.md'),
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Checks whether README tree marker block is current', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, 'README.md'),
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'```text',
+					'old tree',
+					'```',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			let result = await checkReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			assert.deepStrictEqual(result, { found: true, matches: false });
+
+			await updateReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			result = await checkReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			assert.deepStrictEqual(result, { found: true, matches: true });
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('CLI writes and checks README tree marker block', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, 'README.md'),
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'placeholder',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			let result = await runCli(['check'], rootPath);
+			assert.strictEqual(result.exitCode, 1);
+			assert.match(result.stderr, /out of date/);
+
+			result = await runCli(['write'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /updated/);
+
+			result = await runCli(['check'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /up to date/);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('CLI prints generated tree', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, 'README.md'), '# Project\n');
+
+			const result = await runCli(['print'], rootPath);
+
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /README\.md/);
+			assert.strictEqual(result.stderr, '');
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
 	});
 
 	test('Scans according to the root .gitignore', async () => {
