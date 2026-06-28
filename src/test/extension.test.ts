@@ -7,6 +7,12 @@ import * as path from 'path';
 // as well as import your extension to test it
 import * as vscode from 'vscode';
 import { scanDirectory } from '../scanner';
+import {
+	deleteTreeStateFile,
+	loadTreeStateFile,
+	TREE_METADATA_FILE_NAME,
+	saveTreeStateFile,
+} from '../treeMetaStore';
 import { generateTreeString } from '../treeGenerator';
 import {
 	reorderChildren,
@@ -413,6 +419,52 @@ suite('Extension Test Suite', () => {
 			rescanned.children?.[0].description,
 			'project overview',
 		);
+	});
+
+	test('Saves and loads tree metadata from the project file', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+		const state = captureTreeState({
+			name: 'project',
+			path: rootPath,
+			type: 'directory',
+			description: 'project root',
+			children: [{
+				name: 'README.md',
+				path: path.join(rootPath, 'README.md'),
+				type: 'file',
+				excluded: true,
+				description: 'project overview',
+			}],
+		});
+
+		try {
+			await saveTreeStateFile(rootPath, state);
+
+			const loadedState = await loadTreeStateFile(rootPath);
+			assert.deepStrictEqual(loadedState, state);
+			assert.ok(
+				await fs.stat(path.join(rootPath, TREE_METADATA_FILE_NAME)),
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Deletes tree metadata project file', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await saveTreeStateFile(rootPath, {
+				version: 1,
+				directories: {},
+				descriptions: {},
+			});
+			await deleteTreeStateFile(rootPath);
+
+			assert.strictEqual(await loadTreeStateFile(rootPath), undefined);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
 	});
 
 	test('Scans according to the root .gitignore', async () => {
