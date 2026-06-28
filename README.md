@@ -70,6 +70,20 @@ Tree Generator applies root and nested `.gitignore` rules while scanning.
 - VS Code `1.120.0` or later.
 - An open workspace folder.
 
+## CLI
+
+The extension also provides a CLI after the package is installed or linked:
+
+```sh
+tree-generator print
+tree-generator write
+tree-generator check
+```
+
+- `print` writes the generated tree to stdout.
+- `write` updates the marked `README.md` tree block.
+- `check` exits with code `1` when the marked `README.md` tree block is missing or out of date.
+
 ## Extension Settings
 
 Tree Generator does not currently contribute any VS Code settings.

@@ -9,6 +9,11 @@ export interface ReadmeUpdateResult {
     updated: boolean;
 }
 
+export interface ReadmeCheckResult {
+    found: boolean;
+    matches: boolean;
+}
+
 export function renderReadmeTreeBlock(treeString: string): string {
     return [
         README_TREE_START_MARKER,
@@ -74,4 +79,26 @@ export async function updateReadmeTreeBlock(
 
     await fs.writeFile(readmePath, replacement.content, 'utf8');
     return { found: true, updated: true };
+}
+
+export async function checkReadmeTreeBlock(
+    rootPath: string,
+    treeString: string,
+): Promise<ReadmeCheckResult> {
+    let readme: string;
+
+    try {
+        readme = await fs.readFile(path.join(rootPath, 'README.md'), 'utf8');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return { found: false, matches: false };
+        }
+        throw error;
+    }
+
+    const replacement = replaceReadmeTreeBlock(readme, treeString);
+    return {
+        found: replacement.found,
+        matches: replacement.found && replacement.content === readme,
+    };
 }

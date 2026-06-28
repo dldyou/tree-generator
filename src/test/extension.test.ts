@@ -6,7 +6,9 @@ import * as path from 'path';
 // You can import and use all API from the 'vscode' module
 // as well as import your extension to test it
 import * as vscode from 'vscode';
+import { runCli } from '../cli';
 import {
+	checkReadmeTreeBlock,
 	README_TREE_END_MARKER,
 	README_TREE_START_MARKER,
 	replaceReadmeTreeBlock,
@@ -535,6 +537,83 @@ suite('Extension Test Suite', () => {
 			assert.ok(
 				(await fs.readFile(readmePath, 'utf8')).includes('└── README.md'),
 			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Checks whether README tree marker block is current', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, 'README.md'),
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'```text',
+					'old tree',
+					'```',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			let result = await checkReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			assert.deepStrictEqual(result, { found: true, matches: false });
+
+			await updateReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			result = await checkReadmeTreeBlock(rootPath, 'project/\n└── README.md\n');
+			assert.deepStrictEqual(result, { found: true, matches: true });
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('CLI writes and checks README tree marker block', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, 'README.md'),
+				[
+					'# Project',
+					'',
+					README_TREE_START_MARKER,
+					'placeholder',
+					README_TREE_END_MARKER,
+					'',
+				].join('\n'),
+			);
+
+			let result = await runCli(['check'], rootPath);
+			assert.strictEqual(result.exitCode, 1);
+			assert.match(result.stderr, /out of date/);
+
+			result = await runCli(['write'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /updated/);
+
+			result = await runCli(['check'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /up to date/);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('CLI prints generated tree', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, 'README.md'), '# Project\n');
+
+			const result = await runCli(['print'], rootPath);
+
+			assert.strictEqual(result.exitCode, 0);
+			assert.match(result.stdout, /README\.md/);
+			assert.strictEqual(result.stderr, '');
 		} finally {
 			await fs.rm(rootPath, { recursive: true, force: true });
 		}

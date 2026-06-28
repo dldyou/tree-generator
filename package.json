@@ -11,6 +11,9 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
+  "bin": {
+    "tree-generator": "./out/cli.js"
+  },
   "contributes": {
     "commands": [
       {
