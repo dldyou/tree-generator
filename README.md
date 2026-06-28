@@ -14,6 +14,7 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 - Excludes files and folders from the generated output.
 - Keeps excluded entries visible, dimmed, and at the bottom of their directory.
 - Refreshes open editors when files or folders are created or deleted.
+- Updates marked README tree blocks automatically when the tree changes.
 - Copies the edited ASCII tree to the clipboard.
 - Restores the default scanned order with `Reset to default`.
 
@@ -40,6 +41,19 @@ tree-generator/              # VS Code extension
 Descriptions, ordering, and exclusion choices are stored in `.tree-generator.json` and restored when the editor is opened again.
 
 When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
+
+To let Tree Generator update `README.md` automatically, add a marked block. The marker comments are escaped below so this README is not treated as the generated block; remove the leading backslashes when adding the block to your document.
+
+````md
+\<!-- tree-generator:start -->
+```text
+tree-generator/
+└── README.md
+```
+\<!-- tree-generator:end -->
+````
+
+Only the content between these markers is replaced.
 
 ## Scan Exclusions
 
