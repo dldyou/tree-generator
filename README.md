@@ -13,6 +13,7 @@ It starts with a directory-first, alphabetical layout and provides a Webview edi
 - Shows a live ASCII tree preview while editing.
 - Excludes files and folders from the generated output.
 - Keeps excluded entries visible, dimmed, and at the bottom of their directory.
+- Toggles whether `.gitignore` rules are applied from the Webview toolbar.
 - Refreshes open editors when files or folders are created or deleted.
 - Updates marked README tree blocks automatically when the tree changes.
 - Copies the edited ASCII tree to the clipboard.
@@ -35,8 +36,9 @@ tree-generator/              # VS Code extension
 2. `Ctrl + Shift + P` to Open the Command Palette.
 3. Run `Tree Generator: Open Tree Editor`.
 4. Add descriptions, arrange entries, or exclude them in the left panel.
-5. Review the generated ASCII tree in the preview panel.
-6. Select `Copy tree` and paste it into your document.
+5. Use `Respect .gitignore` in the toolbar to include or exclude `.gitignore`-matched entries.
+6. Review the generated ASCII tree in the preview panel.
+7. Select `Copy tree` and paste it into your document.
 
 Descriptions, ordering, and exclusion choices are stored in `.tree-generator.json` and restored when the editor is opened again.
 
@@ -57,9 +59,11 @@ Only the content between these markers is replaced.
 
 ## Scan Exclusions
 
-Tree Generator applies root and nested `.gitignore` rules while scanning.
+Tree Generator applies root and nested `.gitignore` rules while scanning by default.
 
 - `.gitignore` negation patterns such as `!keep.log` are supported.
+- Turn off `Respect .gitignore` in the Webview toolbar to include `.gitignore`-matched entries.
+- The same behavior is available through the `tree-generator.respectGitignore` VS Code setting.
 - Git metadata directories named `.git` are always excluded.
 - Open Tree Generator editors automatically refresh when a `.gitignore` file is created, changed, or deleted.
 - Open Tree Generator editors also refresh when files or folders are created or deleted.
@@ -83,10 +87,11 @@ tree-generator check
 - `print` writes the generated tree to stdout.
 - `write` updates the marked `README.md` tree block.
 - `check` exits with code `1` when the marked `README.md` tree block is missing or out of date.
+- Add `--include-gitignored` to include files and folders matched by `.gitignore`.
 
 ## Extension Settings
 
-Tree Generator does not currently contribute any VS Code settings.
+- `tree-generator.respectGitignore`: excludes files and folders matched by `.gitignore` while scanning. Defaults to `true`.
 
 ## Known Issues
 
@@ -106,3 +111,4 @@ Tree Generator does not currently contribute any VS Code settings.
 ### 0.1.0
 
 - Added detection of created and deleted files and folders.
+- Added a Webview and setting toggle for including `.gitignore`-matched entries.

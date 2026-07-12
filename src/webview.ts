@@ -52,8 +52,22 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         .toolbar {
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 8px;
             margin-bottom: 12px;
+        }
+
+        .toolbar-option {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-left: 6px;
+            color: var(--vscode-foreground);
+            user-select: none;
+        }
+
+        .toolbar-option input {
+            margin: 0;
         }
 
         .hint {
@@ -252,6 +266,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
     <div class="toolbar">
         <button id="copy-button" type="button">Copy tree</button>
         <button id="reset-button" class="secondary" type="button">Reset to default</button>
+        <label class="toolbar-option" title="Exclude files and folders matched by .gitignore rules">
+            <input id="respect-gitignore-checkbox" type="checkbox">
+            Respect .gitignore
+        </label>
         <span id="status" class="status" role="status"></span>
     </div>
     <p class="hint">Add descriptions, drag items to change their order, or exclude them from the output. Descriptions are aligned as # comments in the preview.</p>
@@ -271,6 +289,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const treeElement = document.getElementById('tree');
         const previewElement = document.getElementById('preview');
         const statusElement = document.getElementById('status');
+        const respectGitignoreCheckbox = document.getElementById('respect-gitignore-checkbox');
         const collapsedPaths = new Set();
         let tree;
         let draggedItem;
@@ -286,12 +305,21 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             vscode.postMessage({ type: 'reset' });
         });
 
+        respectGitignoreCheckbox.addEventListener('change', () => {
+            setStatus('Updating scan setting...');
+            vscode.postMessage({
+                type: 'setRespectGitignore',
+                respectGitignore: respectGitignoreCheckbox.checked,
+            });
+        });
+
         window.addEventListener('message', event => {
             const message = event.data;
 
             if (message.type === 'update') {
                 tree = message.tree;
                 previewElement.textContent = message.treeString;
+                respectGitignoreCheckbox.checked = Boolean(message.respectGitignore);
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {

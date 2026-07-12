@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { updateReadmeTreeBlock } from './readmeUpdater';
-import { scanDirectory } from './scanner';
+import { scanDirectory, ScanOptions } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
 import { generateTreeString } from './treeGenerator';
 import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
@@ -22,12 +22,13 @@ export function activate(context: vscode.ExtensionContext) {
         const stateKey = `treeGenerator.treeState:${workspaceFolders[0].uri.toString()}`;
 
         try {
-            const tree = await scanDirectory(rootPath);
+            const scanOptions = getScanOptions(rootPath);
+            const tree = await scanDirectory(rootPath, scanOptions);
             const savedState = await loadSavedTreeState(context, rootPath, stateKey);
             if (savedState?.version === 1) {
                 applyTreeState(tree, savedState);
             }
-            openTreeEditor(context, rootPath, stateKey, tree);
+            openTreeEditor(context, rootPath, stateKey, tree, scanOptions);
         } catch (error) {
             vscode.window.showErrorMessage(
                 `Failed to generate project tree: ${String(error)}`
@@ -36,6 +37,14 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(disposable);
+}
+
+function getScanOptions(rootPath: string): Required<ScanOptions> {
+    return {
+        respectGitignore: vscode.workspace
+            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+            .get<boolean>('respectGitignore', true),
+    };
 }
 
 async function loadSavedTreeState(
@@ -63,6 +72,7 @@ function openTreeEditor(
     rootPath: string,
     stateKey: string,
     initialTree: TreeNode,
+    initialScanOptions: Required<ScanOptions>,
 ): void {
     const panel = vscode.window.createWebviewPanel(
         'treeGenerator.editor',
@@ -75,6 +85,7 @@ function openTreeEditor(
     );
 
     let tree = initialTree;
+    let scanOptions = initialScanOptions;
     let refreshTimer: NodeJS.Timeout | undefined;
     let pendingRefreshStatus = 'Tree refreshed';
 
@@ -96,6 +107,7 @@ function openTreeEditor(
             type: 'update',
             tree,
             treeString,
+            respectGitignore: scanOptions.respectGitignore,
             status,
         });
 
@@ -110,7 +122,7 @@ function openTreeEditor(
 
     const refreshFromFileSystem = async (status: string): Promise<void> => {
         try {
-            const refreshedTree = await scanDirectory(rootPath);
+            const refreshedTree = await scanDirectory(rootPath, scanOptions);
             const savedState = await loadTreeStateFile(rootPath);
             if (savedState?.version === 1) {
                 applyTreeState(refreshedTree, savedState);
@@ -138,6 +150,16 @@ function openTreeEditor(
         }, 150);
     };
 
+    const updateRespectGitignore = async (respectGitignore: boolean): Promise<void> => {
+        await vscode.workspace
+            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+            .update(
+                'respectGitignore',
+                respectGitignore,
+                vscode.ConfigurationTarget.WorkspaceFolder,
+            );
+    };
+
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
         if (path.basename(uri.fsPath) === '.gitignore') {
             return;
@@ -158,6 +180,17 @@ function openTreeEditor(
         gitignoreWatcher.onDidDelete(() => scheduleRefresh('.gitignore changed; tree refreshed')),
         fileTreeWatcher.onDidCreate(scheduleFileTreeRefresh),
         fileTreeWatcher.onDidDelete(scheduleFileTreeRefresh),
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.respectGitignore',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                scanOptions = getScanOptions(rootPath);
+                scheduleRefresh('Scan setting changed; tree refreshed');
+            }
+        }),
     ];
 
     const messageDisposable = panel.webview.onDidReceiveMessage(async message => {
@@ -227,6 +260,18 @@ function openTreeEditor(
                     await saveTree();
                     await sendUpdate('Description updated');
                     break;
+                case 'setRespectGitignore':
+                    if (typeof message.respectGitignore !== 'boolean') {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update scan setting.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await updateRespectGitignore(message.respectGitignore);
+                    break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(generateTreeString(tree));
                     await panel.webview.postMessage({
@@ -237,7 +282,7 @@ function openTreeEditor(
                 case 'reset':
                     await deleteTreeStateFile(rootPath);
                     await context.workspaceState.update(stateKey, undefined);
-                    tree = await scanDirectory(rootPath);
+                    tree = await scanDirectory(rootPath, scanOptions);
                     await sendUpdate('Default order restored');
                     break;
             }

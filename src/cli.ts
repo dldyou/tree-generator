@@ -5,7 +5,7 @@ import {
     checkReadmeTreeBlock,
     updateReadmeTreeBlock,
 } from './readmeUpdater';
-import { scanDirectory } from './scanner';
+import { scanDirectory, ScanOptions } from './scanner';
 import { loadTreeStateFile } from './treeMetaStore';
 import { generateTreeString } from './treeGenerator';
 import { applyTreeState } from './treeState';
@@ -22,10 +22,47 @@ Commands:
   print   Print the generated tree to stdout.
   write   Update the marked README.md tree block.
   check   Verify README.md contains the current generated tree.
+
+Options:
+  --include-gitignored   Include files and folders matched by .gitignore.
+  --respect-gitignore    Exclude files and folders matched by .gitignore. Default.
 `;
 
-async function generateTreeForWorkspace(rootPath: string): Promise<string> {
-    const tree = await scanDirectory(rootPath);
+interface ParsedArgs {
+    command?: string;
+    workspace?: string;
+    scanOptions: Required<ScanOptions>;
+}
+
+function parseArgs(args: string[]): ParsedArgs | string {
+    const parsed: ParsedArgs = {
+        scanOptions: { respectGitignore: true },
+    };
+
+    for (const arg of args) {
+        if (arg === '--include-gitignored') {
+            parsed.scanOptions.respectGitignore = false;
+        } else if (arg === '--respect-gitignore') {
+            parsed.scanOptions.respectGitignore = true;
+        } else if (arg.startsWith('-')) {
+            return `Unknown option: ${arg}`;
+        } else if (!parsed.command) {
+            parsed.command = arg;
+        } else if (!parsed.workspace) {
+            parsed.workspace = arg;
+        } else {
+            return `Unexpected argument: ${arg}`;
+        }
+    }
+
+    return parsed;
+}
+
+async function generateTreeForWorkspace(
+    rootPath: string,
+    scanOptions: ScanOptions,
+): Promise<string> {
+    const tree = await scanDirectory(rootPath, scanOptions);
     const state = await loadTreeStateFile(rootPath);
     if (state?.version === 1) {
         applyTreeState(tree, state);
@@ -38,14 +75,30 @@ export async function runCli(
     args: string[],
     cwd = process.cwd(),
 ): Promise<CliResult> {
-    const [command, workspaceArg] = args;
-
-    if (!command || command === '--help' || command === '-h') {
+    if (args.includes('--help') || args.includes('-h') || args.length === 0) {
         return { exitCode: 0, stdout: USAGE, stderr: '' };
     }
 
-    const rootPath = path.resolve(cwd, workspaceArg ?? '.');
-    const treeString = await generateTreeForWorkspace(rootPath);
+    const parsed = parseArgs(args);
+    if (typeof parsed === 'string') {
+        return {
+            exitCode: 1,
+            stdout: '',
+            stderr: `${parsed}\n\n${USAGE}`,
+        };
+    }
+
+    const command = parsed.command;
+    if (!command || !['print', 'write', 'check'].includes(command)) {
+        return {
+            exitCode: 1,
+            stdout: '',
+            stderr: `Unknown command: ${command ?? ''}\n\n${USAGE}`,
+        };
+    }
+
+    const rootPath = path.resolve(cwd, parsed.workspace ?? '.');
+    const treeString = await generateTreeForWorkspace(rootPath, parsed.scanOptions);
 
     switch (command) {
         case 'print':
@@ -91,13 +144,13 @@ export async function runCli(
                 stderr: '',
             };
         }
-        default:
-            return {
-                exitCode: 1,
-                stdout: '',
-                stderr: `Unknown command: ${command}\n\n${USAGE}`,
-            };
     }
+
+    return {
+        exitCode: 1,
+        stdout: '',
+        stderr: `Unknown command: ${command}\n\n${USAGE}`,
+    };
 }
 
 if (require.main === module) {

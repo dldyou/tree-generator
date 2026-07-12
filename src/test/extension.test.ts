@@ -619,6 +619,25 @@ suite('Extension Test Suite', () => {
 		}
 	});
 
+	test('CLI can include .gitignore-matched entries', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, '.gitignore'), '*.log\n');
+			await fs.writeFile(path.join(rootPath, 'debug.log'), '');
+
+			let result = await runCli(['print'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.ok(!result.stdout.includes('debug.log'));
+
+			result = await runCli(['print', '--include-gitignored'], rootPath);
+			assert.strictEqual(result.exitCode, 0);
+			assert.ok(result.stdout.includes('debug.log'));
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
 	test('Scans according to the root .gitignore', async () => {
 		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
 
@@ -638,6 +657,21 @@ suite('Extension Test Suite', () => {
 				tree.children?.map(child => child.name),
 				['out', '.gitignore'],
 			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('Can scan without applying .gitignore rules', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, '.gitignore'), '*.log\n');
+			await fs.writeFile(path.join(rootPath, 'debug.log'), '');
+
+			const tree = await scanDirectory(rootPath, { respectGitignore: false });
+
+			assert.ok(tree.children?.some(child => child.name === 'debug.log'));
 		} finally {
 			await fs.rm(rootPath, { recursive: true, force: true });
 		}
