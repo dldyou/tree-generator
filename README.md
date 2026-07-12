@@ -101,6 +101,10 @@ tree-generator check
 
 ## Release Notes
 
+### 0.2.1
+
+- Fixed the Webview `.gitignore` toggle so it can be saved per workspace folder.
+
 ### 0.0.1
 
 - Added the visual Tree Editor and live ASCII preview.

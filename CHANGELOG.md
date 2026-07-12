@@ -6,4 +6,6 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
-- Initial release
+## [0.2.1]
+
+- Fixed the `.gitignore` Webview toggle so it can save to workspace folder settings.

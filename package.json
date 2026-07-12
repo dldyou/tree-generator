@@ -2,7 +2,7 @@
   "name": "tree-generator-dldyou",
   "displayName": "Tree Generator",
   "description": "Generate project tree for README.md",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "engines": {
     "vscode": "^1.120.0"
   },
@@ -27,6 +27,7 @@
         "tree-generator.respectGitignore": {
           "type": "boolean",
           "default": true,
+          "scope": "resource",
           "description": "Exclude files and folders matched by root or nested .gitignore files while scanning."
         }
       }
