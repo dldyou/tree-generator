@@ -3,6 +3,10 @@ import * as path from 'path';
 import ignore = require('ignore');
 import { TreeNode } from './types';
 
+export interface ScanOptions {
+    respectGitignore?: boolean;
+}
+
 interface IgnoreScope {
     basePath: string;
     matcher: ignore.Ignore;
@@ -57,9 +61,12 @@ function isIgnored(
 async function scanDirectoryWithScopes(
     dirPath: string,
     inheritedScopes: IgnoreScope[],
+    options: Required<ScanOptions>,
 ): Promise<TreeNode> {
     const name = path.basename(dirPath);
-    const scopes = await loadIgnoreScopes(dirPath, inheritedScopes);
+    const scopes = options.respectGitignore
+        ? await loadIgnoreScopes(dirPath, inheritedScopes)
+        : inheritedScopes;
 
     const root: TreeNode = {
         name,
@@ -74,11 +81,12 @@ async function scanDirectoryWithScopes(
             return false;
         }
 
-        return !isIgnored(
-            path.join(dirPath, entry.name),
-            entry.isDirectory(),
-            scopes,
-        );
+        return !options.respectGitignore
+            || !isIgnored(
+                path.join(dirPath, entry.name),
+                entry.isDirectory(),
+                scopes,
+            );
     });
 
     filteredEntries.sort((a, b) => {
@@ -91,7 +99,7 @@ async function scanDirectoryWithScopes(
     for (const entry of filteredEntries) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-            const childNode = await scanDirectoryWithScopes(fullPath, scopes);
+            const childNode = await scanDirectoryWithScopes(fullPath, scopes, options);
             root.children!.push(childNode);
         } else if (entry.isFile()) {
             root.children!.push({
@@ -105,6 +113,11 @@ async function scanDirectoryWithScopes(
     return root;
 }
 
-export async function scanDirectory(dirPath: string): Promise<TreeNode> {
-    return scanDirectoryWithScopes(dirPath, []);
+export async function scanDirectory(
+    dirPath: string,
+    options: ScanOptions = {},
+): Promise<TreeNode> {
+    return scanDirectoryWithScopes(dirPath, [], {
+        respectGitignore: options.respectGitignore ?? true,
+    });
 }

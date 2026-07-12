@@ -11,13 +11,26 @@
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
+  "bin": {
+    "tree-generator": "./out/cli.js"
+  },
   "contributes": {
     "commands": [
       {
         "command": "tree-generator.generateTree",
         "title": "Tree Generator: Open Tree Editor"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Tree Generator",
+      "properties": {
+        "tree-generator.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Exclude files and folders matched by root or nested .gitignore files while scanning."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
