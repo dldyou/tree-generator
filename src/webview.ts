@@ -182,7 +182,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .toggle,
         .move-button,
-        .exclude-button {
+        .exclude-button,
+        .bulk-button {
             flex: 0 0 auto;
             width: 24px;
             height: 24px;
@@ -194,8 +195,14 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .toggle:hover,
         .move-button:hover,
-        .exclude-button:hover {
+        .exclude-button:hover,
+        .bulk-button:hover {
             background: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .bulk-button {
+            width: auto;
+            padding: 0 6px;
         }
 
         .toggle-placeholder {
@@ -465,8 +472,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
             row.append(createDescriptionInput(node));
 
+            if (!isRoot || node.type === 'directory') {
+                row.append(createNodeActions(item, node, isRoot));
+            }
             if (!isRoot) {
-                row.append(createNodeActions(item, node));
                 if (!isFiltering) {
                     addDragHandlers(item);
                 }
@@ -609,15 +618,40 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             });
         }
 
-        function createNodeActions(item, node) {
+        function createNodeActions(item, node, isRoot) {
             const actions = document.createElement('span');
             actions.className = 'node-actions';
-            actions.append(
-                createMoveButton('↑', 'Move up', () => moveItem(item, -1)),
-                createMoveButton('↓', 'Move down', () => moveItem(item, 1)),
-                createExcludeButton(node),
-            );
+            if (!isRoot) {
+                actions.append(
+                    createMoveButton('↑', 'Move up', () => moveItem(item, -1)),
+                    createMoveButton('↓', 'Move down', () => moveItem(item, 1)),
+                    createExcludeButton(node),
+                );
+            }
+            if (node.type === 'directory') {
+                actions.append(
+                    createBulkButton('Include all', node, false),
+                    createBulkButton('Exclude all', node, true),
+                );
+            }
             return actions;
+        }
+
+        function createBulkButton(label, node, excluded) {
+            const button = document.createElement('button');
+            button.className = 'bulk-button';
+            button.type = 'button';
+            button.textContent = label;
+            button.title = label + ' descendants';
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                vscode.postMessage({
+                    type: 'setDescendantsExcluded',
+                    directoryPath: node.path,
+                    excluded,
+                });
+            });
+            return button;
         }
 
         function createMoveButton(label, title, onClick) {

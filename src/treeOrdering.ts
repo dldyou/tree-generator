@@ -85,6 +85,35 @@ export function setNodeExcluded(
     return true;
 }
 
+export function setDescendantsExcluded(
+    root: TreeNode,
+    directoryPath: string,
+    excluded: boolean,
+): boolean {
+    const directory = findNode(root, directoryPath)?.node;
+    if (!directory || directory.type !== 'directory') {
+        return false;
+    }
+
+    const updateDescendants = (node: TreeNode): void => {
+        if (!node.children) {
+            return;
+        }
+
+        for (const child of node.children) {
+            child.excluded = excluded || undefined;
+            updateDescendants(child);
+        }
+        node.children = [
+            ...node.children.filter(child => !child.excluded),
+            ...node.children.filter(child => child.excluded),
+        ];
+    };
+
+    updateDescendants(directory);
+    return true;
+}
+
 export function setNodeDescription(
     root: TreeNode,
     nodePath: string,

@@ -4,7 +4,12 @@ import { updateReadmeTreeBlock } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
 import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
-import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
+import {
+    reorderChildren,
+    setDescendantsExcluded,
+    setNodeDescription,
+    setNodeExcluded,
+} from './treeOrdering';
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
 import { TreeNode } from './types';
 import { getTreeEditorHtml } from './webview';
@@ -326,6 +331,31 @@ function openTreeEditor(
                         message.excluded
                             ? 'Item excluded from output'
                             : 'Item included in output',
+                    );
+                    break;
+                case 'setDescendantsExcluded':
+                    if (
+                        typeof message.directoryPath !== 'string'
+                        || typeof message.excluded !== 'boolean'
+                        || !setDescendantsExcluded(
+                            tree,
+                            message.directoryPath,
+                            message.excluded,
+                        )
+                    ) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update that directory.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await saveTree();
+                    await sendUpdate(
+                        message.excluded
+                            ? 'Directory contents excluded from output'
+                            : 'Directory contents included in output',
                     );
                     break;
                 case 'setDescription':
