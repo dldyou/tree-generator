@@ -18,8 +18,24 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        const rootPath = workspaceFolders[0].uri.fsPath;
-        const stateKey = `treeGenerator.treeState:${workspaceFolders[0].uri.toString()}`;
+        let workspaceFolder: vscode.WorkspaceFolder | undefined = workspaceFolders[0];
+        if (workspaceFolders.length > 1) {
+            const selectedFolder = await vscode.window.showQuickPick(
+                workspaceFolders.map(folder => ({
+                    label: folder.name,
+                    description: folder.uri.fsPath,
+                    folder,
+                })),
+                { placeHolder: 'Select a workspace folder' },
+            );
+            workspaceFolder = selectedFolder?.folder;
+        }
+        if (!workspaceFolder) {
+            return;
+        }
+
+        const rootPath = workspaceFolder.uri.fsPath;
+        const stateKey = `treeGenerator.treeState:${workspaceFolder.uri.toString()}`;
 
         try {
             const scanOptions = getScanOptions(rootPath);
