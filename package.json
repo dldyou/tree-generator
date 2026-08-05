@@ -45,6 +45,13 @@
           "default": "unicode",
           "scope": "resource",
           "description": "Characters used to draw the generated tree."
+        },
+        "tree-generator.maxDepth": {
+          "type": "integer",
+          "minimum": -1,
+          "default": -1,
+          "scope": "resource",
+          "description": "Maximum tree depth. Use -1 for unlimited depth and 0 for the root only."
         }
       }
     }

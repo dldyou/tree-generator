@@ -54,10 +54,14 @@ function getReadmePath(rootPath: string): string {
 }
 
 function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
+    const configuration = vscode.workspace.getConfiguration(
+        'tree-generator',
+        vscode.Uri.file(rootPath),
+    );
+    const maxDepth = configuration.get<number>('maxDepth', -1);
     return {
-        style: vscode.workspace
-            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
-            .get<'unicode' | 'ascii'>('outputStyle', 'unicode'),
+        style: configuration.get<'unicode' | 'ascii'>('outputStyle', 'unicode'),
+        maxDepth: maxDepth < 0 ? undefined : maxDepth,
     };
 }
 
@@ -219,6 +223,14 @@ function openTreeEditor(
                 )
             ) {
                 void sendUpdate('Tree output style changed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.maxDepth',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('Tree depth changed');
             }
         }),
     ];

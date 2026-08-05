@@ -40,4 +40,15 @@ suite('Tree generator options', () => {
         assert.ok(lines[1].startsWith('`-- src/'));
         assert.ok(lines[2].startsWith('    `-- index.ts'));
     });
+
+    test('includes the root at depth zero and omits deeper nodes', () => {
+        assert.strictEqual(
+            generateTreeString(tree, { maxDepth: 0 }),
+            'root/   # root description\n',
+        );
+        assert.strictEqual(
+            generateTreeString(tree, { maxDepth: 1 }),
+            'root/       # root description\n\u2514\u2500\u2500 src/    # source files\n',
+        );
+    });
 });

@@ -28,6 +28,7 @@ Options:
   --respect-gitignore    Exclude files and folders matched by .gitignore. Default.
   --readme <path>        Markdown file to update. Default: README.md.
   --style <style>        Tree characters: unicode or ascii. Default: unicode.
+  --max-depth <depth>    Maximum tree depth. 0 prints only the root.
 `;
 
 interface ParsedArgs {
@@ -63,6 +64,13 @@ function parseArgs(args: string[]): ParsedArgs | string {
                 return '--style must be unicode or ascii';
             }
             parsed.generatorOptions.style = style;
+        } else if (arg === '--max-depth') {
+            const value = args[++index];
+            const maxDepth = Number(value);
+            if (!value || !Number.isInteger(maxDepth) || maxDepth < 0) {
+                return '--max-depth must be a non-negative integer';
+            }
+            parsed.generatorOptions.maxDepth = maxDepth;
         } else if (arg.startsWith('-')) {
             return `Unknown option: ${arg}`;
         } else if (!parsed.command) {
