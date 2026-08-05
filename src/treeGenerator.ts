@@ -1,5 +1,9 @@
 import { TreeNode } from './types';
 
+export interface TreeGeneratorOptions {
+    style?: 'unicode' | 'ascii';
+}
+
 interface TreeLine {
     content: string;
     description?: string;
@@ -35,8 +39,12 @@ function generateNodeLines(
     node: TreeNode,
     prefix: string,
     isLast: boolean,
+    style: NonNullable<TreeGeneratorOptions['style']>,
 ): TreeLine[] {
-    const connector = isLast ? '└── ' : '├── ';
+    const ascii = style === 'ascii';
+    const connector = isLast
+        ? (ascii ? '`-- ' : '\u2514\u2500\u2500 ')
+        : (ascii ? '|-- ' : '\u251c\u2500\u2500 ');
     const name = node.type === 'directory' ? `${node.name}/` : node.name;
     const lines: TreeLine[] = [{
         content: `${prefix}${connector}${name}`,
@@ -45,7 +53,7 @@ function generateNodeLines(
 
     const includedChildren = node.children?.filter(child => !child.excluded) ?? [];
     if (includedChildren.length > 0) {
-        const nextPrefix = prefix + (isLast ? '    ' : '│   ');
+        const nextPrefix = prefix + (isLast ? '    ' : (ascii ? '|   ' : '\u2502   '));
 
         includedChildren.forEach((child, index) => {
             lines.push(
@@ -53,6 +61,7 @@ function generateNodeLines(
                     child,
                     nextPrefix,
                     index === includedChildren.length - 1,
+                    style,
                 ),
             );
         });
@@ -61,7 +70,11 @@ function generateNodeLines(
     return lines;
 }
 
-export function generateTreeString(root: TreeNode): string {
+export function generateTreeString(
+    root: TreeNode,
+    options: TreeGeneratorOptions = {},
+): string {
+    const style = options.style ?? 'unicode';
     const lines: TreeLine[] = [{
         content: `${root.name}/`,
         description: root.description,
@@ -74,6 +87,7 @@ export function generateTreeString(root: TreeNode): string {
                 child,
                 '',
                 index === includedChildren.length - 1,
+                style,
             ),
         );
     });

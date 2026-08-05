@@ -35,6 +35,16 @@
           "default": "README.md",
           "scope": "resource",
           "description": "Markdown file to update, relative to the workspace folder."
+        },
+        "tree-generator.outputStyle": {
+          "type": "string",
+          "enum": [
+            "unicode",
+            "ascii"
+          ],
+          "default": "unicode",
+          "scope": "resource",
+          "description": "Characters used to draw the generated tree."
         }
       }
     }

@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import { updateReadmeTreeBlock } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
-import { generateTreeString } from './treeGenerator';
+import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
 import { TreeNode } from './types';
@@ -53,6 +53,14 @@ function getReadmePath(rootPath: string): string {
         .get<string>('readmePath', 'README.md');
 }
 
+function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
+    return {
+        style: vscode.workspace
+            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+            .get<'unicode' | 'ascii'>('outputStyle', 'unicode'),
+    };
+}
+
 async function loadSavedTreeState(
     context: vscode.ExtensionContext,
     rootPath: string,
@@ -100,7 +108,7 @@ function openTreeEditor(
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
-        const treeString = generateTreeString(tree);
+        const treeString = generateTreeString(tree, getGeneratorOptions(rootPath));
         let readmeUpdateError: string | undefined;
 
         try {
@@ -204,6 +212,14 @@ function openTreeEditor(
             ) {
                 void sendUpdate('README target changed');
             }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.outputStyle',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('Tree output style changed');
+            }
         }),
     ];
 
@@ -287,7 +303,9 @@ function openTreeEditor(
                     await updateRespectGitignore(message.respectGitignore);
                     break;
                 case 'copy':
-                    await vscode.env.clipboard.writeText(generateTreeString(tree));
+                    await vscode.env.clipboard.writeText(
+                        generateTreeString(tree, getGeneratorOptions(rootPath)),
+                    );
                     await panel.webview.postMessage({
                         type: 'status',
                         text: 'Copied to clipboard',

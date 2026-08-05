@@ -7,7 +7,7 @@ import {
 } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { loadTreeStateFile } from './treeMetaStore';
-import { generateTreeString } from './treeGenerator';
+import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import { applyTreeState } from './treeState';
 
 export interface CliResult {
@@ -27,18 +27,21 @@ Options:
   --include-gitignored   Include files and folders matched by .gitignore.
   --respect-gitignore    Exclude files and folders matched by .gitignore. Default.
   --readme <path>        Markdown file to update. Default: README.md.
+  --style <style>        Tree characters: unicode or ascii. Default: unicode.
 `;
 
 interface ParsedArgs {
     command?: string;
     workspace?: string;
     readmePath: string;
+    generatorOptions: TreeGeneratorOptions;
     scanOptions: Required<ScanOptions>;
 }
 
 function parseArgs(args: string[]): ParsedArgs | string {
     const parsed: ParsedArgs = {
         readmePath: 'README.md',
+        generatorOptions: {},
         scanOptions: { respectGitignore: true },
     };
 
@@ -54,6 +57,12 @@ function parseArgs(args: string[]): ParsedArgs | string {
                 return 'Missing value for --readme';
             }
             parsed.readmePath = targetPath;
+        } else if (arg === '--style') {
+            const style = args[++index];
+            if (style !== 'unicode' && style !== 'ascii') {
+                return '--style must be unicode or ascii';
+            }
+            parsed.generatorOptions.style = style;
         } else if (arg.startsWith('-')) {
             return `Unknown option: ${arg}`;
         } else if (!parsed.command) {
@@ -71,6 +80,7 @@ function parseArgs(args: string[]): ParsedArgs | string {
 async function generateTreeForWorkspace(
     rootPath: string,
     scanOptions: ScanOptions,
+    generatorOptions: TreeGeneratorOptions,
 ): Promise<string> {
     const tree = await scanDirectory(rootPath, scanOptions);
     const state = await loadTreeStateFile(rootPath);
@@ -78,7 +88,7 @@ async function generateTreeForWorkspace(
         applyTreeState(tree, state);
     }
 
-    return generateTreeString(tree);
+    return generateTreeString(tree, generatorOptions);
 }
 
 export async function runCli(
@@ -108,7 +118,11 @@ export async function runCli(
     }
 
     const rootPath = path.resolve(cwd, parsed.workspace ?? '.');
-    const treeString = await generateTreeForWorkspace(rootPath, parsed.scanOptions);
+    const treeString = await generateTreeForWorkspace(
+        rootPath,
+        parsed.scanOptions,
+        parsed.generatorOptions,
+    );
 
     switch (command) {
         case 'print':
