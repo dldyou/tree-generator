@@ -26,24 +26,34 @@ Commands:
 Options:
   --include-gitignored   Include files and folders matched by .gitignore.
   --respect-gitignore    Exclude files and folders matched by .gitignore. Default.
+  --readme <path>        Markdown file to update. Default: README.md.
 `;
 
 interface ParsedArgs {
     command?: string;
     workspace?: string;
+    readmePath: string;
     scanOptions: Required<ScanOptions>;
 }
 
 function parseArgs(args: string[]): ParsedArgs | string {
     const parsed: ParsedArgs = {
+        readmePath: 'README.md',
         scanOptions: { respectGitignore: true },
     };
 
-    for (const arg of args) {
+    for (let index = 0; index < args.length; index++) {
+        const arg = args[index];
         if (arg === '--include-gitignored') {
             parsed.scanOptions.respectGitignore = false;
         } else if (arg === '--respect-gitignore') {
             parsed.scanOptions.respectGitignore = true;
+        } else if (arg === '--readme') {
+            const targetPath = args[++index];
+            if (!targetPath || targetPath.startsWith('-')) {
+                return 'Missing value for --readme';
+            }
+            parsed.readmePath = targetPath;
         } else if (arg.startsWith('-')) {
             return `Unknown option: ${arg}`;
         } else if (!parsed.command) {
@@ -104,43 +114,43 @@ export async function runCli(
         case 'print':
             return { exitCode: 0, stdout: treeString, stderr: '' };
         case 'write': {
-            const result = await updateReadmeTreeBlock(rootPath, treeString);
+            const result = await updateReadmeTreeBlock(rootPath, treeString, parsed.readmePath);
             if (!result.found) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree markers were not found.\n',
+                    stderr: `${parsed.readmePath} tree markers were not found.\n`,
                 };
             }
 
             return {
                 exitCode: 0,
                 stdout: result.updated
-                    ? 'README.md tree block updated.\n'
-                    : 'README.md tree block is already up to date.\n',
+                    ? `${parsed.readmePath} tree block updated.\n`
+                    : `${parsed.readmePath} tree block is already up to date.\n`,
                 stderr: '',
             };
         }
         case 'check': {
-            const result = await checkReadmeTreeBlock(rootPath, treeString);
+            const result = await checkReadmeTreeBlock(rootPath, treeString, parsed.readmePath);
             if (!result.found) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree markers were not found.\n',
+                    stderr: `${parsed.readmePath} tree markers were not found.\n`,
                 };
             }
             if (!result.matches) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree block is out of date. Run `tree-generator write`.\n',
+                    stderr: `${parsed.readmePath} tree block is out of date. Run \`tree-generator write\`.\n`,
                 };
             }
 
             return {
                 exitCode: 0,
-                stdout: 'README.md tree block is up to date.\n',
+                stdout: `${parsed.readmePath} tree block is up to date.\n`,
                 stderr: '',
             };
         }

@@ -14,6 +14,21 @@ export interface ReadmeCheckResult {
     matches: boolean;
 }
 
+function resolveReadmePath(rootPath: string, targetPath = 'README.md'): string {
+    if (path.isAbsolute(targetPath)) {
+        throw new Error('README target path must be relative and within the root path.');
+    }
+
+    const resolvedRootPath = path.resolve(rootPath);
+    const resolvedTargetPath = path.resolve(resolvedRootPath, targetPath);
+    const relativePath = path.relative(resolvedRootPath, resolvedTargetPath);
+    if (relativePath === '..' || relativePath.startsWith(`..${path.sep}`) || path.isAbsolute(relativePath)) {
+        throw new Error('README target path must be relative and within the root path.');
+    }
+
+    return resolvedTargetPath;
+}
+
 export function renderReadmeTreeBlock(treeString: string): string {
     return [
         README_TREE_START_MARKER,
@@ -55,8 +70,9 @@ export function replaceReadmeTreeBlock(
 export async function updateReadmeTreeBlock(
     rootPath: string,
     treeString: string,
+    targetPath?: string,
 ): Promise<ReadmeUpdateResult> {
-    const readmePath = path.join(rootPath, 'README.md');
+    const readmePath = resolveReadmePath(rootPath, targetPath);
     let readme: string;
 
     try {
@@ -84,11 +100,12 @@ export async function updateReadmeTreeBlock(
 export async function checkReadmeTreeBlock(
     rootPath: string,
     treeString: string,
+    targetPath?: string,
 ): Promise<ReadmeCheckResult> {
     let readme: string;
 
     try {
-        readme = await fs.readFile(path.join(rootPath, 'README.md'), 'utf8');
+        readme = await fs.readFile(resolveReadmePath(rootPath, targetPath), 'utf8');
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
             return { found: false, matches: false };

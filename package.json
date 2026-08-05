@@ -29,6 +29,12 @@
           "default": true,
           "scope": "resource",
           "description": "Exclude files and folders matched by root or nested .gitignore files while scanning."
+        },
+        "tree-generator.readmePath": {
+          "type": "string",
+          "default": "README.md",
+          "scope": "resource",
+          "description": "Markdown file to update, relative to the workspace folder."
         }
       }
     }

@@ -47,6 +47,12 @@ function getScanOptions(rootPath: string): Required<ScanOptions> {
     };
 }
 
+function getReadmePath(rootPath: string): string {
+    return vscode.workspace
+        .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+        .get<string>('readmePath', 'README.md');
+}
+
 async function loadSavedTreeState(
     context: vscode.ExtensionContext,
     rootPath: string,
@@ -98,9 +104,9 @@ function openTreeEditor(
         let readmeUpdateError: string | undefined;
 
         try {
-            await updateReadmeTreeBlock(rootPath, treeString);
+            await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
         } catch (error) {
-            readmeUpdateError = `Failed to update README.md: ${String(error)}`;
+            readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
         }
 
         await panel.webview.postMessage({
@@ -189,6 +195,14 @@ function openTreeEditor(
             ) {
                 scanOptions = getScanOptions(rootPath);
                 scheduleRefresh('Scan setting changed; tree refreshed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.readmePath',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('README target changed');
             }
         }),
     ];
