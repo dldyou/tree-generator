@@ -69,6 +69,12 @@ function getReadmePath(rootPath: string): string {
         .get<string>('readmePath', 'README.md');
 }
 
+function getAutoUpdateReadme(rootPath: string): boolean {
+    return vscode.workspace
+        .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+        .get<boolean>('autoUpdateReadme', true);
+}
+
 function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
     const configuration = vscode.workspace.getConfiguration(
         'tree-generator',
@@ -131,10 +137,13 @@ function openTreeEditor(
         const treeString = generateTreeString(tree, getGeneratorOptions(rootPath));
         let readmeUpdateError: string | undefined;
 
-        try {
-            await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
-        } catch (error) {
-            readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
+        const autoUpdateReadme = getAutoUpdateReadme(rootPath);
+        if (autoUpdateReadme) {
+            try {
+                await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
+            } catch (error) {
+                readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
+            }
         }
 
         await panel.webview.postMessage({
@@ -142,6 +151,7 @@ function openTreeEditor(
             tree,
             treeString,
             respectGitignore: scanOptions.respectGitignore,
+            autoUpdateReadme,
             status,
         });
 
@@ -194,6 +204,16 @@ function openTreeEditor(
             );
     };
 
+    const updateAutoUpdateReadme = async (autoUpdateReadme: boolean): Promise<void> => {
+        await vscode.workspace
+            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+            .update(
+                'autoUpdateReadme',
+                autoUpdateReadme,
+                vscode.ConfigurationTarget.WorkspaceFolder,
+            );
+    };
+
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
         if (path.basename(uri.fsPath) === '.gitignore') {
             return;
@@ -231,6 +251,14 @@ function openTreeEditor(
                 )
             ) {
                 void sendUpdate('README target changed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.autoUpdateReadme',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('README auto update setting changed');
             }
             if (
                 event.affectsConfiguration(
@@ -329,6 +357,18 @@ function openTreeEditor(
                     }
 
                     await updateRespectGitignore(message.respectGitignore);
+                    break;
+                case 'setAutoUpdateReadme':
+                    if (typeof message.autoUpdateReadme !== 'boolean') {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update README setting.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await updateAutoUpdateReadme(message.autoUpdateReadme);
                     break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(

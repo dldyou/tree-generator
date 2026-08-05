@@ -36,6 +36,12 @@
           "scope": "resource",
           "description": "Markdown file to update, relative to the workspace folder."
         },
+        "tree-generator.autoUpdateReadme": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Automatically update the marked markdown tree block when the tree changes."
+        },
         "tree-generator.outputStyle": {
           "type": "string",
           "enum": [

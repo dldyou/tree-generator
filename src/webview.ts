@@ -270,6 +270,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             <input id="respect-gitignore-checkbox" type="checkbox">
             Respect .gitignore
         </label>
+        <label class="toolbar-option" title="Update the marked markdown tree block when the tree changes">
+            <input id="auto-update-readme-checkbox" type="checkbox">
+            Auto update README
+        </label>
         <span id="status" class="status" role="status"></span>
     </div>
     <p class="hint">Add descriptions, drag items to change their order, or exclude them from the output. Descriptions are aligned as # comments in the preview.</p>
@@ -290,6 +294,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const previewElement = document.getElementById('preview');
         const statusElement = document.getElementById('status');
         const respectGitignoreCheckbox = document.getElementById('respect-gitignore-checkbox');
+        const autoUpdateReadmeCheckbox = document.getElementById('auto-update-readme-checkbox');
         const collapsedPaths = new Set();
         let tree;
         let draggedItem;
@@ -313,6 +318,14 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             });
         });
 
+        autoUpdateReadmeCheckbox.addEventListener('change', () => {
+            setStatus('Updating README setting...');
+            vscode.postMessage({
+                type: 'setAutoUpdateReadme',
+                autoUpdateReadme: autoUpdateReadmeCheckbox.checked,
+            });
+        });
+
         window.addEventListener('message', event => {
             const message = event.data;
 
@@ -320,6 +333,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 tree = message.tree;
                 previewElement.textContent = message.treeString;
                 respectGitignoreCheckbox.checked = Boolean(message.respectGitignore);
+                autoUpdateReadmeCheckbox.checked = Boolean(message.autoUpdateReadme);
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {
