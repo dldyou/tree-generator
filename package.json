@@ -3,6 +3,10 @@
   "displayName": "Tree Generator",
   "description": "Generate project tree for README.md",
   "version": "0.3.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dldyou/tree-generator.git"
+  },
   "engines": {
     "vscode": "^1.120.0"
   },
