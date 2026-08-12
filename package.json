@@ -29,6 +29,35 @@
           "default": true,
           "scope": "resource",
           "description": "Exclude files and folders matched by root or nested .gitignore files while scanning."
+        },
+        "tree-generator.readmePath": {
+          "type": "string",
+          "default": "README.md",
+          "scope": "resource",
+          "description": "Markdown file to update, relative to the workspace folder."
+        },
+        "tree-generator.autoUpdateReadme": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Automatically update the marked markdown tree block when the tree changes."
+        },
+        "tree-generator.outputStyle": {
+          "type": "string",
+          "enum": [
+            "unicode",
+            "ascii"
+          ],
+          "default": "unicode",
+          "scope": "resource",
+          "description": "Characters used to draw the generated tree."
+        },
+        "tree-generator.maxDepth": {
+          "type": "integer",
+          "minimum": -1,
+          "default": -1,
+          "scope": "resource",
+          "description": "Maximum tree depth. Use -1 for unlimited depth and 0 for the root only."
         }
       }
     }

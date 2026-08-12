@@ -3,8 +3,13 @@ import * as vscode from 'vscode';
 import { updateReadmeTreeBlock } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
-import { generateTreeString } from './treeGenerator';
-import { reorderChildren, setNodeDescription, setNodeExcluded } from './treeOrdering';
+import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
+import {
+    reorderChildren,
+    setDescendantsExcluded,
+    setNodeDescription,
+    setNodeExcluded,
+} from './treeOrdering';
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
 import { TreeNode } from './types';
 import { getTreeEditorHtml } from './webview';
@@ -18,8 +23,24 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        const rootPath = workspaceFolders[0].uri.fsPath;
-        const stateKey = `treeGenerator.treeState:${workspaceFolders[0].uri.toString()}`;
+        let workspaceFolder: vscode.WorkspaceFolder | undefined = workspaceFolders[0];
+        if (workspaceFolders.length > 1) {
+            const selectedFolder = await vscode.window.showQuickPick(
+                workspaceFolders.map(folder => ({
+                    label: folder.name,
+                    description: folder.uri.fsPath,
+                    folder,
+                })),
+                { placeHolder: 'Select a workspace folder' },
+            );
+            workspaceFolder = selectedFolder?.folder;
+        }
+        if (!workspaceFolder) {
+            return;
+        }
+
+        const rootPath = workspaceFolder.uri.fsPath;
+        const stateKey = `treeGenerator.treeState:${workspaceFolder.uri.toString()}`;
 
         try {
             const scanOptions = getScanOptions(rootPath);
@@ -44,6 +65,30 @@ function getScanOptions(rootPath: string): Required<ScanOptions> {
         respectGitignore: vscode.workspace
             .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
             .get<boolean>('respectGitignore', true),
+    };
+}
+
+function getReadmePath(rootPath: string): string {
+    return vscode.workspace
+        .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+        .get<string>('readmePath', 'README.md');
+}
+
+function getAutoUpdateReadme(rootPath: string): boolean {
+    return vscode.workspace
+        .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+        .get<boolean>('autoUpdateReadme', true);
+}
+
+function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
+    const configuration = vscode.workspace.getConfiguration(
+        'tree-generator',
+        vscode.Uri.file(rootPath),
+    );
+    const maxDepth = configuration.get<number>('maxDepth', -1);
+    return {
+        style: configuration.get<'unicode' | 'ascii'>('outputStyle', 'unicode'),
+        maxDepth: maxDepth < 0 ? undefined : maxDepth,
     };
 }
 
@@ -94,13 +139,16 @@ function openTreeEditor(
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
-        const treeString = generateTreeString(tree);
+        const treeString = generateTreeString(tree, getGeneratorOptions(rootPath));
         let readmeUpdateError: string | undefined;
 
-        try {
-            await updateReadmeTreeBlock(rootPath, treeString);
-        } catch (error) {
-            readmeUpdateError = `Failed to update README.md: ${String(error)}`;
+        const autoUpdateReadme = getAutoUpdateReadme(rootPath);
+        if (autoUpdateReadme) {
+            try {
+                await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
+            } catch (error) {
+                readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
+            }
         }
 
         await panel.webview.postMessage({
@@ -108,6 +156,7 @@ function openTreeEditor(
             tree,
             treeString,
             respectGitignore: scanOptions.respectGitignore,
+            autoUpdateReadme,
             status,
         });
 
@@ -160,6 +209,16 @@ function openTreeEditor(
             );
     };
 
+    const updateAutoUpdateReadme = async (autoUpdateReadme: boolean): Promise<void> => {
+        await vscode.workspace
+            .getConfiguration('tree-generator', vscode.Uri.file(rootPath))
+            .update(
+                'autoUpdateReadme',
+                autoUpdateReadme,
+                vscode.ConfigurationTarget.WorkspaceFolder,
+            );
+    };
+
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
         if (path.basename(uri.fsPath) === '.gitignore') {
             return;
@@ -189,6 +248,38 @@ function openTreeEditor(
             ) {
                 scanOptions = getScanOptions(rootPath);
                 scheduleRefresh('Scan setting changed; tree refreshed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.readmePath',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('README target changed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.autoUpdateReadme',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('README auto update setting changed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.outputStyle',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('Tree output style changed');
+            }
+            if (
+                event.affectsConfiguration(
+                    'tree-generator.maxDepth',
+                    vscode.Uri.file(rootPath),
+                )
+            ) {
+                void sendUpdate('Tree depth changed');
             }
         }),
     ];
@@ -242,6 +333,31 @@ function openTreeEditor(
                             : 'Item included in output',
                     );
                     break;
+                case 'setDescendantsExcluded':
+                    if (
+                        typeof message.directoryPath !== 'string'
+                        || typeof message.excluded !== 'boolean'
+                        || !setDescendantsExcluded(
+                            tree,
+                            message.directoryPath,
+                            message.excluded,
+                        )
+                    ) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update that directory.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await saveTree();
+                    await sendUpdate(
+                        message.excluded
+                            ? 'Directory contents excluded from output'
+                            : 'Directory contents included in output',
+                    );
+                    break;
                 case 'setDescription':
                     if (
                         typeof message.nodePath !== 'string'
@@ -272,8 +388,22 @@ function openTreeEditor(
 
                     await updateRespectGitignore(message.respectGitignore);
                     break;
+                case 'setAutoUpdateReadme':
+                    if (typeof message.autoUpdateReadme !== 'boolean') {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update README setting.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await updateAutoUpdateReadme(message.autoUpdateReadme);
+                    break;
                 case 'copy':
-                    await vscode.env.clipboard.writeText(generateTreeString(tree));
+                    await vscode.env.clipboard.writeText(
+                        generateTreeString(tree, getGeneratorOptions(rootPath)),
+                    );
                     await panel.webview.postMessage({
                         type: 'status',
                         text: 'Copied to clipboard',

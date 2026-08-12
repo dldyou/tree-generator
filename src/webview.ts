@@ -40,6 +40,11 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             background: var(--vscode-button-hoverBackground);
         }
 
+        button:disabled {
+            cursor: default;
+            opacity: 0.5;
+        }
+
         .secondary {
             color: var(--vscode-button-secondaryForeground);
             background: var(--vscode-button-secondaryBackground);
@@ -68,6 +73,27 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .toolbar-option input {
             margin: 0;
+        }
+
+        .search-input {
+            min-width: 180px;
+            height: 28px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            border-radius: 2px;
+            padding: 2px 8px;
+            color: var(--vscode-input-foreground);
+            background: var(--vscode-input-background);
+            font-family: var(--vscode-font-family);
+        }
+
+        .search-input:focus {
+            border-color: var(--vscode-focusBorder);
+            outline: none;
+        }
+
+        mark {
+            color: inherit;
+            background: var(--vscode-editor-findMatchHighlightBackground);
         }
 
         .hint {
@@ -156,7 +182,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .toggle,
         .move-button,
-        .exclude-button {
+        .exclude-button,
+        .bulk-button {
             flex: 0 0 auto;
             width: 24px;
             height: 24px;
@@ -168,8 +195,14 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         .toggle:hover,
         .move-button:hover,
-        .exclude-button:hover {
+        .exclude-button:hover,
+        .bulk-button:hover {
             background: var(--vscode-toolbar-hoverBackground);
+        }
+
+        .bulk-button {
+            width: auto;
+            padding: 0 6px;
         }
 
         .toggle-placeholder {
@@ -266,9 +299,14 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
     <div class="toolbar">
         <button id="copy-button" type="button">Copy tree</button>
         <button id="reset-button" class="secondary" type="button">Reset to default</button>
+        <input id="search-input" class="search-input" type="search" placeholder="Search files and folders" aria-label="Search files and folders" aria-controls="tree">
         <label class="toolbar-option" title="Exclude files and folders matched by .gitignore rules">
             <input id="respect-gitignore-checkbox" type="checkbox">
             Respect .gitignore
+        </label>
+        <label class="toolbar-option" title="Update the marked markdown tree block when the tree changes">
+            <input id="auto-update-readme-checkbox" type="checkbox">
+            Auto update README
         </label>
         <span id="status" class="status" role="status"></span>
     </div>
@@ -290,7 +328,11 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const previewElement = document.getElementById('preview');
         const statusElement = document.getElementById('status');
         const respectGitignoreCheckbox = document.getElementById('respect-gitignore-checkbox');
+        const autoUpdateReadmeCheckbox = document.getElementById('auto-update-readme-checkbox');
+        const searchInput = document.getElementById('search-input');
         const collapsedPaths = new Set();
+        let matchingPaths = new Set();
+        let isFiltering = false;
         let tree;
         let draggedItem;
         let draggedParentPath;
@@ -313,6 +355,16 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             });
         });
 
+        autoUpdateReadmeCheckbox.addEventListener('change', () => {
+            setStatus('Updating README setting...');
+            vscode.postMessage({
+                type: 'setAutoUpdateReadme',
+                autoUpdateReadme: autoUpdateReadmeCheckbox.checked,
+            });
+        });
+
+        searchInput.addEventListener('input', renderTree);
+
         window.addEventListener('message', event => {
             const message = event.data;
 
@@ -320,6 +372,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 tree = message.tree;
                 previewElement.textContent = message.treeString;
                 respectGitignoreCheckbox.checked = Boolean(message.respectGitignore);
+                autoUpdateReadmeCheckbox.checked = Boolean(message.autoUpdateReadme);
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {
@@ -339,6 +392,13 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 return;
             }
 
+            const query = searchInput.value.trim().toLocaleLowerCase();
+            isFiltering = query.length > 0;
+            matchingPaths = new Set();
+            if (isFiltering) {
+                findMatches(tree, query);
+            }
+
             const rootList = document.createElement('ul');
             rootList.className = 'children-list';
             const rootItem = createTreeItem(tree, true);
@@ -346,14 +406,25 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             treeElement.append(rootList);
         }
 
+        function findMatches(node, query) {
+            const matches = node.name.toLocaleLowerCase().includes(query);
+            const childMatches = (node.children ?? []).some(child => findMatches(child, query));
+            if (matches || childMatches) {
+                matchingPaths.add(node.path);
+                return true;
+            }
+            return false;
+        }
+
         function createTreeItem(node, isRoot = false) {
             const item = document.createElement('li');
             item.className = 'tree-item ' + node.type;
             item.dataset.path = node.path;
             item.dataset.excluded = Boolean(node.excluded).toString();
-            item.draggable = !isRoot;
+            item.draggable = !isRoot && !isFiltering;
+            item.hidden = isFiltering && !matchingPaths.has(node.path);
 
-            if (collapsedPaths.has(node.path)) {
+            if (!isFiltering && collapsedPaths.has(node.path)) {
                 item.classList.add('collapsed');
             }
             if (node.excluded) {
@@ -369,6 +440,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 toggle.className = 'toggle';
                 toggle.type = 'button';
                 toggle.title = 'Collapse or expand directory';
+                toggle.disabled = isFiltering;
                 toggle.textContent = collapsedPaths.has(node.path) ? '▸' : '▾';
                 toggle.addEventListener('click', event => {
                     event.stopPropagation();
@@ -394,15 +466,19 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
             const name = document.createElement('span');
             name.className = 'node-name';
-            name.textContent = node.name + (node.type === 'directory' ? '/' : '');
+            appendHighlightedName(name, node.name, node.type === 'directory');
             name.title = node.path;
             row.append(name);
 
             row.append(createDescriptionInput(node));
 
+            if (!isRoot || node.type === 'directory') {
+                row.append(createNodeActions(item, node, isRoot));
+            }
             if (!isRoot) {
-                row.append(createNodeActions(item, node));
-                addDragHandlers(item);
+                if (!isFiltering) {
+                    addDragHandlers(item);
+                }
             }
 
             if (node.children?.length) {
@@ -410,6 +486,20 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             }
 
             return item;
+        }
+
+        function appendHighlightedName(element, nodeName, isDirectory) {
+            const query = searchInput.value.trim();
+            const index = isFiltering ? nodeName.toLocaleLowerCase().indexOf(query.toLocaleLowerCase()) : -1;
+            if (index < 0) {
+                element.textContent = nodeName + (isDirectory ? '/' : '');
+                return;
+            }
+
+            element.append(nodeName.slice(0, index));
+            const match = document.createElement('mark');
+            match.textContent = nodeName.slice(index, index + query.length);
+            element.append(match, nodeName.slice(index + query.length), isDirectory ? '/' : '');
         }
 
         function createDescriptionInput(node) {
@@ -528,15 +618,40 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             });
         }
 
-        function createNodeActions(item, node) {
+        function createNodeActions(item, node, isRoot) {
             const actions = document.createElement('span');
             actions.className = 'node-actions';
-            actions.append(
-                createMoveButton('↑', 'Move up', () => moveItem(item, -1)),
-                createMoveButton('↓', 'Move down', () => moveItem(item, 1)),
-                createExcludeButton(node),
-            );
+            if (!isRoot) {
+                actions.append(
+                    createMoveButton('↑', 'Move up', () => moveItem(item, -1)),
+                    createMoveButton('↓', 'Move down', () => moveItem(item, 1)),
+                    createExcludeButton(node),
+                );
+            }
+            if (node.type === 'directory') {
+                actions.append(
+                    createBulkButton('Include all', node, false),
+                    createBulkButton('Exclude all', node, true),
+                );
+            }
             return actions;
+        }
+
+        function createBulkButton(label, node, excluded) {
+            const button = document.createElement('button');
+            button.className = 'bulk-button';
+            button.type = 'button';
+            button.textContent = label;
+            button.title = label + ' descendants';
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                vscode.postMessage({
+                    type: 'setDescendantsExcluded',
+                    directoryPath: node.path,
+                    excluded,
+                });
+            });
+            return button;
         }
 
         function createMoveButton(label, title, onClick) {
@@ -545,6 +660,7 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             button.type = 'button';
             button.textContent = label;
             button.title = title;
+            button.disabled = isFiltering;
             button.addEventListener('click', event => {
                 event.stopPropagation();
                 onClick();

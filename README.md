@@ -1,82 +1,44 @@
 # Tree Generator
 
-Tree Generator is a VS Code extension for creating an ASCII project tree for documents such as `README.md`.
-
-It starts with a directory-first, alphabetical layout and provides a Webview editor where files and folders can be reordered or excluded without modifying the filesystem.
+Tree Generator is a VS Code extension that creates and maintains a project tree in a marked block of a Markdown document.
 
 ## Features
 
-- Generates an ASCII tree from the current workspace.
-- Sorts directories first, then sorts entries alphabetically by default.
-- Reorders sibling files and folders using drag and drop or move buttons.
-- Adds descriptions to files and folders as aligned `# description` comments.
-- Shows a live ASCII tree preview while editing.
-- Excludes files and folders from the generated output.
-- Keeps excluded entries visible, dimmed, and at the bottom of their directory.
-- Toggles whether `.gitignore` rules are applied from the Webview toolbar.
-- Refreshes open editors when files or folders are created or deleted.
-- Updates marked README tree blocks automatically when the tree changes.
-- Copies the edited ASCII tree to the clipboard.
-- Restores the default scanned order with `Reset to default`.
-
-Example output:
+- Scans the workspace directory-first, then alphabetically; `.gitignore` rules apply by default and `.git` is always excluded.
+- Lets you reorder entries, add descriptions, and exclude entries without changing the filesystem. Choices are stored in `.tree-generator.json`.
+- Searches the Webview tree and includes or excludes all descendants of a directory at once.
+- Refreshes open editors when files, folders, or `.gitignore` files change.
+- Updates a configurable marked Markdown block automatically, with a Webview toggle to disable updates.
+- Supports Unicode or ASCII connectors, a maximum output depth, and multi-root workspace folder selection.
+- Provides a CLI to print, write, or check the generated tree.
 
 ```text
-tree-generator/              # VS Code extension
-├── src/                     # Extension source
-│   ├── extension.ts         # Extension entry point
-│   └── treeGenerator.ts     # ASCII tree generator
-├── package.json             # Extension manifest
+tree-generator/
+├── src/                 # Extension source
+│   ├── extension.ts      # Extension entry point
+│   └── treeGenerator.ts  # Tree renderer
+├── package.json          # Extension manifest
 └── README.md
 ```
 
-## Usage
+## Use
 
-1. Open a workspace folder in VS Code.
-2. `Ctrl + Shift + P` to Open the Command Palette.
-3. Run `Tree Generator: Open Tree Editor`.
-4. Add descriptions, arrange entries, or exclude them in the left panel.
-5. Use `Respect .gitignore` in the toolbar to include or exclude `.gitignore`-matched entries.
-6. Review the generated ASCII tree in the preview panel.
-7. Select `Copy tree` and paste it into your document.
+1. Open a workspace and run `Tree Generator: Open Tree Editor` from the Command Palette. Select a folder when using a multi-root workspace.
+2. Search or edit descriptions, order, and exclusions; copy the preview when needed.
+3. Add the following marked block to the Markdown file Tree Generator should maintain.
 
-Descriptions, ordering, and exclusion choices are stored in `.tree-generator.json` and restored when the editor is opened again.
-
-When new files or folders are discovered, they are inserted alphabetically among active entries. Existing custom ordering is preserved, and excluded entries remain at the bottom.
-
-To let Tree Generator update `README.md` automatically, add a marked block. The marker comments are escaped below so this README is not treated as the generated block; remove the leading backslashes when adding the block to your document.
+The marker comments below are escaped so this README is not updated. Remove the backslashes within the comments when copying them into your document. Only the content between the markers is replaced.
 
 ````md
-\<!-- tree-generator:start -->
+<\!-- tree-generator:start -->
 ```text
 tree-generator/
 └── README.md
 ```
-\<!-- tree-generator:end -->
+<\!-- tree-generator:end -->
 ````
 
-Only the content between these markers is replaced.
-
-## Scan Exclusions
-
-Tree Generator applies root and nested `.gitignore` rules while scanning by default.
-
-- `.gitignore` negation patterns such as `!keep.log` are supported.
-- Turn off `Respect .gitignore` in the Webview toolbar to include `.gitignore`-matched entries.
-- The same behavior is available through the `tree-generator.respectGitignore` VS Code setting.
-- Git metadata directories named `.git` are always excluded.
-- Open Tree Generator editors automatically refresh when a `.gitignore` file is created, changed, or deleted.
-- Open Tree Generator editors also refresh when files or folders are created or deleted.
-- Manual exclusions made in the Webview are separate from `.gitignore` rules.
-
-## Requirements
-
-- VS Code `1.120.0` or later.
-- An open workspace folder.
-
 ## CLI
-
-The extension also provides a CLI after the package is installed or linked:
 
 ```sh
 tree-generator print
@@ -84,35 +46,37 @@ tree-generator write
 tree-generator check
 ```
 
-- `print` writes the generated tree to stdout.
-- `write` updates the marked `README.md` tree block.
-- `check` exits with code `1` when the marked `README.md` tree block is missing or out of date.
-- Add `--include-gitignored` to include files and folders matched by `.gitignore`.
+- `print` writes the tree to stdout.
+- `write` updates the marked block; `check` exits with code `1` when the block is missing or outdated.
+- `--include-gitignored` includes `.gitignore`-matched entries; `--respect-gitignore` restores the default.
+- `--readme <path>` selects the Markdown target.
+- `--style unicode|ascii` selects tree characters.
+- `--max-depth <depth>` limits output depth; `0` prints only the root.
 
-## Extension Settings
+## Unreleased: 0.3.0
 
-- `tree-generator.respectGitignore`: excludes files and folders matched by `.gitignore` while scanning. Defaults to `true`.
+- Configurable automatic Markdown updates and target file.
+- Unicode and ASCII output styles with a maximum depth.
+- Webview search and directory-wide include/exclude actions.
+- Folder selection for multi-root workspaces.
+- Reorganized README and changelog documentation.
 
-## Known Issues
+## Settings
 
-- In a multi-root workspace, Tree Generator currently scans the first workspace folder.
-- File content-only edits do not trigger a tree refresh because they do not change the project structure.
-- `.tree-generator.json` should be committed if you want to share tree metadata with collaborators.
+- `tree-generator.respectGitignore` — apply `.gitignore` rules (default: `true`).
+- `tree-generator.readmePath` — Markdown file to update, relative to the workspace folder (default: `README.md`).
+- `tree-generator.autoUpdateReadme` — automatically update the marked Markdown block (default: `true`).
+- `tree-generator.outputStyle` — `unicode` or `ascii` tree characters (default: `unicode`).
+- `tree-generator.maxDepth` — maximum depth; `-1` means unlimited and `0` shows only the root.
 
-## Release Notes
+## Requirements
 
-### 0.2.1
+- VS Code 1.120.0 or later.
+- An open workspace folder.
 
-- Fixed the Webview `.gitignore` toggle so it can be saved per workspace folder.
+## Known limitations
 
-### 0.0.1
+- File content-only edits do not refresh the tree because they do not change the project structure.
+- Commit `.tree-generator.json` to share ordering, descriptions, and exclusions with collaborators.
 
-- Added the visual Tree Editor and live ASCII preview.
-- Added drag-and-drop ordering and manual exclusions.
-- Added workspace-specific ordering and exclusion persistence.
-- Added root and nested `.gitignore` support with automatic refresh.
-
-### 0.1.0
-
-- Added detection of created and deleted files and folders.
-- Added a Webview and setting toggle for including `.gitignore`-matched entries.
+See [CHANGELOG.md](CHANGELOG.md) for release history.

@@ -1,5 +1,10 @@
 import { TreeNode } from './types';
 
+export interface TreeGeneratorOptions {
+    style?: 'unicode' | 'ascii';
+    maxDepth?: number;
+}
+
 interface TreeLine {
     content: string;
     description?: string;
@@ -35,8 +40,14 @@ function generateNodeLines(
     node: TreeNode,
     prefix: string,
     isLast: boolean,
+    depth: number,
+    maxDepth: number,
+    style: NonNullable<TreeGeneratorOptions['style']>,
 ): TreeLine[] {
-    const connector = isLast ? '└── ' : '├── ';
+    const ascii = style === 'ascii';
+    const connector = isLast
+        ? (ascii ? '`-- ' : '\u2514\u2500\u2500 ')
+        : (ascii ? '|-- ' : '\u251c\u2500\u2500 ');
     const name = node.type === 'directory' ? `${node.name}/` : node.name;
     const lines: TreeLine[] = [{
         content: `${prefix}${connector}${name}`,
@@ -44,8 +55,8 @@ function generateNodeLines(
     }];
 
     const includedChildren = node.children?.filter(child => !child.excluded) ?? [];
-    if (includedChildren.length > 0) {
-        const nextPrefix = prefix + (isLast ? '    ' : '│   ');
+    if (depth < maxDepth && includedChildren.length > 0) {
+        const nextPrefix = prefix + (isLast ? '    ' : (ascii ? '|   ' : '\u2502   '));
 
         includedChildren.forEach((child, index) => {
             lines.push(
@@ -53,6 +64,9 @@ function generateNodeLines(
                     child,
                     nextPrefix,
                     index === includedChildren.length - 1,
+                    depth + 1,
+                    maxDepth,
+                    style,
                 ),
             );
         });
@@ -61,22 +75,32 @@ function generateNodeLines(
     return lines;
 }
 
-export function generateTreeString(root: TreeNode): string {
+export function generateTreeString(
+    root: TreeNode,
+    options: TreeGeneratorOptions = {},
+): string {
+    const style = options.style ?? 'unicode';
+    const maxDepth = options.maxDepth ?? Infinity;
     const lines: TreeLine[] = [{
         content: `${root.name}/`,
         description: root.description,
     }];
 
     const includedChildren = root.children?.filter(child => !child.excluded) ?? [];
-    includedChildren.forEach((child, index) => {
-        lines.push(
-            ...generateNodeLines(
-                child,
-                '',
-                index === includedChildren.length - 1,
-            ),
-        );
-    });
+    if (maxDepth > 0) {
+        includedChildren.forEach((child, index) => {
+            lines.push(
+                ...generateNodeLines(
+                    child,
+                    '',
+                    index === includedChildren.length - 1,
+                    1,
+                    maxDepth,
+                    style,
+                ),
+            );
+        });
+    }
 
     const longestLineLength = Math.max(...lines.map(line => displayWidth(line.content)));
     const descriptionColumn = Math.ceil((longestLineLength + 1) / 4) * 4;

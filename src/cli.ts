@@ -7,7 +7,7 @@ import {
 } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { loadTreeStateFile } from './treeMetaStore';
-import { generateTreeString } from './treeGenerator';
+import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import { applyTreeState } from './treeState';
 
 export interface CliResult {
@@ -26,24 +26,51 @@ Commands:
 Options:
   --include-gitignored   Include files and folders matched by .gitignore.
   --respect-gitignore    Exclude files and folders matched by .gitignore. Default.
+  --readme <path>        Markdown file to update. Default: README.md.
+  --style <style>        Tree characters: unicode or ascii. Default: unicode.
+  --max-depth <depth>    Maximum tree depth. 0 prints only the root.
 `;
 
 interface ParsedArgs {
     command?: string;
     workspace?: string;
+    readmePath: string;
+    generatorOptions: TreeGeneratorOptions;
     scanOptions: Required<ScanOptions>;
 }
 
 function parseArgs(args: string[]): ParsedArgs | string {
     const parsed: ParsedArgs = {
+        readmePath: 'README.md',
+        generatorOptions: {},
         scanOptions: { respectGitignore: true },
     };
 
-    for (const arg of args) {
+    for (let index = 0; index < args.length; index++) {
+        const arg = args[index];
         if (arg === '--include-gitignored') {
             parsed.scanOptions.respectGitignore = false;
         } else if (arg === '--respect-gitignore') {
             parsed.scanOptions.respectGitignore = true;
+        } else if (arg === '--readme') {
+            const targetPath = args[++index];
+            if (!targetPath || targetPath.startsWith('-')) {
+                return 'Missing value for --readme';
+            }
+            parsed.readmePath = targetPath;
+        } else if (arg === '--style') {
+            const style = args[++index];
+            if (style !== 'unicode' && style !== 'ascii') {
+                return '--style must be unicode or ascii';
+            }
+            parsed.generatorOptions.style = style;
+        } else if (arg === '--max-depth') {
+            const value = args[++index];
+            const maxDepth = Number(value);
+            if (!value || !Number.isInteger(maxDepth) || maxDepth < 0) {
+                return '--max-depth must be a non-negative integer';
+            }
+            parsed.generatorOptions.maxDepth = maxDepth;
         } else if (arg.startsWith('-')) {
             return `Unknown option: ${arg}`;
         } else if (!parsed.command) {
@@ -61,6 +88,7 @@ function parseArgs(args: string[]): ParsedArgs | string {
 async function generateTreeForWorkspace(
     rootPath: string,
     scanOptions: ScanOptions,
+    generatorOptions: TreeGeneratorOptions,
 ): Promise<string> {
     const tree = await scanDirectory(rootPath, scanOptions);
     const state = await loadTreeStateFile(rootPath);
@@ -68,7 +96,7 @@ async function generateTreeForWorkspace(
         applyTreeState(tree, state);
     }
 
-    return generateTreeString(tree);
+    return generateTreeString(tree, generatorOptions);
 }
 
 export async function runCli(
@@ -98,49 +126,53 @@ export async function runCli(
     }
 
     const rootPath = path.resolve(cwd, parsed.workspace ?? '.');
-    const treeString = await generateTreeForWorkspace(rootPath, parsed.scanOptions);
+    const treeString = await generateTreeForWorkspace(
+        rootPath,
+        parsed.scanOptions,
+        parsed.generatorOptions,
+    );
 
     switch (command) {
         case 'print':
             return { exitCode: 0, stdout: treeString, stderr: '' };
         case 'write': {
-            const result = await updateReadmeTreeBlock(rootPath, treeString);
+            const result = await updateReadmeTreeBlock(rootPath, treeString, parsed.readmePath);
             if (!result.found) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree markers were not found.\n',
+                    stderr: `${parsed.readmePath} tree markers were not found.\n`,
                 };
             }
 
             return {
                 exitCode: 0,
                 stdout: result.updated
-                    ? 'README.md tree block updated.\n'
-                    : 'README.md tree block is already up to date.\n',
+                    ? `${parsed.readmePath} tree block updated.\n`
+                    : `${parsed.readmePath} tree block is already up to date.\n`,
                 stderr: '',
             };
         }
         case 'check': {
-            const result = await checkReadmeTreeBlock(rootPath, treeString);
+            const result = await checkReadmeTreeBlock(rootPath, treeString, parsed.readmePath);
             if (!result.found) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree markers were not found.\n',
+                    stderr: `${parsed.readmePath} tree markers were not found.\n`,
                 };
             }
             if (!result.matches) {
                 return {
                     exitCode: 1,
                     stdout: '',
-                    stderr: 'README.md tree block is out of date. Run `tree-generator write`.\n',
+                    stderr: `${parsed.readmePath} tree block is out of date. Run \`tree-generator write\`.\n`,
                 };
             }
 
             return {
                 exitCode: 0,
-                stdout: 'README.md tree block is up to date.\n',
+                stdout: `${parsed.readmePath} tree block is up to date.\n`,
                 stderr: '',
             };
         }
