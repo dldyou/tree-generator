@@ -1,35 +1,51 @@
 # Changelog
 
-All notable changes to Tree Generator are documented here.
+Notable changes to Tree Generator are listed by release.
 
-## [Unreleased]
+## [0.3.0] - 2026-08-12
 
 ### Added
 
-- Configurable automatic Markdown updates and target Markdown file.
-- Unicode and ASCII tree styles with a maximum depth option.
-- Webview search and directory-wide include/exclude actions.
-- Workspace folder selection in multi-root workspaces.
+- Configurable Markdown target file and automatic update toggle.
+- Unicode and ASCII output styles with an optional maximum depth.
+- Webview search with matching-path expansion and highlighting.
+- Directory-wide include and exclude actions.
+- Workspace folder selection for multi-root workspaces.
+- CLI options: `--readme`, `--style`, and `--max-depth`.
 
 ### Changed
 
-- Reorganized README and changelog documentation and corrected tree examples.
+- Simplified README and changelog documentation.
 
-## [0.2.1]
+## [0.2.1] - 2026-07-12
 
-- Fixed the Webview `.gitignore` toggle so it saves to workspace-folder settings.
+### Fixed
 
-## [0.2.0]
+- Allowed `tree-generator.respectGitignore` to be saved per workspace folder.
 
-- Added automatic updates for marked README tree blocks.
-- Saved tree metadata in `.tree-generator.json`.
-- Added the `tree-generator` CLI with `print`, `write`, and `check` commands.
+## [0.2.0] - 2026-07-12
 
-## [0.1.0]
+### Added
 
-- Refreshed open Tree Generator editors when files or folders are created or deleted.
-- Added controls for including `.gitignore`-matched entries.
+- Project-level tree metadata persistence in `.tree-generator.json`.
+- Automatic updates for marked README tree blocks.
+- CLI commands: `print`, `write`, and `check`.
+- Webview and VS Code setting to include or exclude `.gitignore` matches.
 
-## [0.0.1]
+## [0.1.0] - 2026-06-25
 
-- Added the Tree Editor, live preview, ordering, exclusions, descriptions, and `.gitignore` support.
+### Added
+
+- Automatic tree refresh when files or folders are created or deleted.
+
+## [0.0.1] - 2026-06-15
+
+### Added
+
+- Initial VS Code Tree Editor and live preview.
+- Directory-first alphabetical scanning.
+- Drag-and-drop ordering and move controls.
+- Manual file and directory exclusions.
+- File and directory descriptions rendered as aligned `#` comments.
+- Root and nested `.gitignore` support with change detection.
+- Clipboard copy and default-order reset actions.
