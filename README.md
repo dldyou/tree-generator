@@ -2,6 +2,8 @@
 
 Tree Generator is a VS Code extension for visually editing a project tree and keeping it in a Markdown document.
 
+![Tree Generator Webview](images/image.png)
+
 ```text
 tree-generator/
 ├── src/                 # Extension source
@@ -31,10 +33,12 @@ To update a Markdown file automatically, add this block after removing the backs
 
 ````md
 <\!-- tree-generator:start -->
+
 ```text
 project/
 └── README.md
 ```
+
 <\!-- tree-generator:end -->
 ````
 
@@ -42,13 +46,13 @@ Only the content between the markers is replaced.
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `tree-generator.respectGitignore` | `true` | Apply root and nested `.gitignore` rules. |
-| `tree-generator.readmePath` | `README.md` | Markdown target relative to the workspace folder. |
-| `tree-generator.autoUpdateReadme` | `true` | Update the marked block when the tree changes. |
-| `tree-generator.outputStyle` | `unicode` | Use `unicode` or `ascii` tree characters. |
-| `tree-generator.maxDepth` | `-1` | Maximum depth; `-1` is unlimited and `0` is root only. |
+| Setting                           | Default     | Description                                            |
+| --------------------------------- | ----------- | ------------------------------------------------------ |
+| `tree-generator.respectGitignore` | `true`      | Apply root and nested `.gitignore` rules.              |
+| `tree-generator.readmePath`       | `README.md` | Markdown target relative to the workspace folder.      |
+| `tree-generator.autoUpdateReadme` | `true`      | Update the marked block when the tree changes.         |
+| `tree-generator.outputStyle`      | `unicode`   | Use `unicode` or `ascii` tree characters.              |
+| `tree-generator.maxDepth`         | `-1`        | Maximum depth; `-1` is unlimited and `0` is root only. |
 
 ## CLI
 
