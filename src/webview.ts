@@ -301,6 +301,35 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             color: var(--vscode-errorForeground);
         }
 
+        .settings {
+            display: flex;
+            align-items: end;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .setting {
+            display: grid;
+            gap: 4px;
+            color: var(--vscode-descriptionForeground);
+            font-size: 12px;
+        }
+
+        .setting input,
+        .setting select {
+            min-width: 110px;
+            height: 28px;
+            border: 1px solid var(--vscode-input-border, transparent);
+            padding: 2px 7px;
+            color: var(--vscode-input-foreground);
+            background: var(--vscode-input-background);
+        }
+
+        .setting:first-child input {
+            min-width: 220px;
+        }
+
         @media (max-width: 760px) {
             .layout {
                 grid-template-columns: 1fr;
@@ -327,6 +356,20 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         <span id="markdown-diagnostic-text"></span>
         <button id="setup-markdown-button" class="secondary" type="button" hidden>Set up Markdown</button>
     </div>
+    <div class="settings" aria-label="Tree output settings">
+        <label class="setting">Markdown target
+            <input id="readme-path-input" type="text" value="README.md">
+        </label>
+        <label class="setting">Output style
+            <select id="output-style-select">
+                <option value="unicode">Unicode</option>
+                <option value="ascii">ASCII</option>
+            </select>
+        </label>
+        <label class="setting">Maximum depth (-1 = unlimited)
+            <input id="max-depth-input" type="number" min="-1" step="1" value="-1">
+        </label>
+    </div>
     <p class="hint">Add descriptions, drag items to change their order, or exclude them from the output. Descriptions are aligned as # comments in the preview.</p>
     <main class="layout">
         <section class="panel">
@@ -349,6 +392,9 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const markdownDiagnosticElement = document.getElementById('markdown-diagnostic');
         const markdownDiagnosticText = document.getElementById('markdown-diagnostic-text');
         const setupMarkdownButton = document.getElementById('setup-markdown-button');
+        const readmePathInput = document.getElementById('readme-path-input');
+        const outputStyleSelect = document.getElementById('output-style-select');
+        const maxDepthInput = document.getElementById('max-depth-input');
         const searchInput = document.getElementById('search-input');
         const collapsedPaths = new Set();
         let matchingPaths = new Set();
@@ -388,6 +434,25 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             vscode.postMessage({ type: 'setupMarkdown' });
         });
 
+        function updateOutputSettings() {
+            const maxDepth = Number(maxDepthInput.value);
+            if (!readmePathInput.value.trim() || !Number.isInteger(maxDepth) || maxDepth < -1) {
+                setStatus('Enter a Markdown target and a depth of -1 or greater.', true);
+                return;
+            }
+            setStatus('Updating output settings...');
+            vscode.postMessage({
+                type: 'setOutputSettings',
+                readmePath: readmePathInput.value,
+                outputStyle: outputStyleSelect.value,
+                maxDepth,
+            });
+        }
+
+        readmePathInput.addEventListener('change', updateOutputSettings);
+        outputStyleSelect.addEventListener('change', updateOutputSettings);
+        maxDepthInput.addEventListener('change', updateOutputSettings);
+
         searchInput.addEventListener('input', renderTree);
 
         window.addEventListener('message', event => {
@@ -402,6 +467,9 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 markdownDiagnosticText.textContent = diagnostic?.text ?? '';
                 markdownDiagnosticElement.classList.toggle('error', Boolean(diagnostic?.isError));
                 setupMarkdownButton.hidden = !diagnostic?.canSetup;
+                readmePathInput.value = message.readmePath ?? 'README.md';
+                outputStyleSelect.value = message.outputStyle ?? 'unicode';
+                maxDepthInput.value = String(message.maxDepth ?? -1);
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {

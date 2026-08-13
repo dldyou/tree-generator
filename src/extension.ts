@@ -179,7 +179,8 @@ function openTreeEditor(
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
-        const treeString = generateTreeString(tree, getGeneratorOptions(rootPath));
+        const generatorOptions = getGeneratorOptions(rootPath);
+        const treeString = generateTreeString(tree, generatorOptions);
         let readmeUpdateError: string | undefined;
 
         const autoUpdateReadme = getAutoUpdateReadme(rootPath);
@@ -214,6 +215,9 @@ function openTreeEditor(
             respectGitignore: scanOptions.respectGitignore,
             autoUpdateReadme,
             readmeDiagnostic,
+            readmePath,
+            outputStyle: generatorOptions.style ?? 'unicode',
+            maxDepth: generatorOptions.maxDepth ?? -1,
             status,
         });
 
@@ -274,6 +278,32 @@ function openTreeEditor(
                 autoUpdateReadme,
                 vscode.ConfigurationTarget.WorkspaceFolder,
             );
+    };
+
+    const updateOutputSettings = async (
+        readmePath: string,
+        outputStyle: 'unicode' | 'ascii',
+        maxDepth: number,
+    ): Promise<void> => {
+        const configuration = vscode.workspace.getConfiguration(
+            'tree-generator',
+            vscode.Uri.file(rootPath),
+        );
+        await configuration.update(
+            'readmePath',
+            readmePath,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
+        await configuration.update(
+            'outputStyle',
+            outputStyle,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
+        await configuration.update(
+            'maxDepth',
+            maxDepth,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
     };
 
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
@@ -464,6 +494,29 @@ function openTreeEditor(
                         getReadmePath(rootPath),
                     );
                     await sendUpdate('Markdown tree block created');
+                    break;
+                case 'setOutputSettings':
+                    if (
+                        typeof message.readmePath !== 'string'
+                        || message.readmePath.trim().length === 0
+                        || (message.outputStyle !== 'unicode' && message.outputStyle !== 'ascii')
+                        || !Number.isInteger(message.maxDepth)
+                        || message.maxDepth < -1
+                    ) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update output settings.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await updateOutputSettings(
+                        message.readmePath.trim(),
+                        message.outputStyle,
+                        message.maxDepth,
+                    );
+                    await sendUpdate('Output settings updated');
                     break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(
