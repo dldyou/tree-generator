@@ -139,6 +139,7 @@ export function resetDirectory(
     }
 
     const resetNode = (node: TreeNode): void => {
+        node.excluded = undefined;
         node.description = undefined;
         for (const child of node.children ?? []) {
             child.excluded = undefined;

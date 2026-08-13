@@ -13,6 +13,7 @@ suite('Directory reset', () => {
 					name: 'src',
 					path: '/root/src',
 					type: 'directory',
+					excluded: true,
 					description: 'source',
 					children: [
 						{ name: 'z.ts', path: '/root/src/z.ts', type: 'file', excluded: true },
@@ -41,6 +42,7 @@ suite('Directory reset', () => {
 		assert.strictEqual(resetDirectory(tree, '/root/src'), true);
 		const src = tree.children?.[0];
 		assert.strictEqual(src?.description, undefined);
+		assert.strictEqual(src?.excluded, undefined);
 		assert.deepStrictEqual(src?.children?.map(child => child.name), ['lib', 'a.ts', 'z.ts']);
 		assert.ok(src?.children?.every(child => !child.excluded && !child.description));
 		assert.deepStrictEqual(
