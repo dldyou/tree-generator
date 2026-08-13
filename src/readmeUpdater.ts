@@ -46,15 +46,22 @@ export function renderReadmeTreeBlock(treeString: string): string {
 }
 
 function getSetupStatus(readme: string): ReadmeSetupStatus {
-    const hasStartMarker = readme.includes(README_TREE_START_MARKER);
-    const hasEndMarker = readme.includes(README_TREE_END_MARKER);
-    if (hasStartMarker && hasEndMarker) {
+    const startIndex = readme.indexOf(README_TREE_START_MARKER);
+    const anyEndIndex = readme.indexOf(README_TREE_END_MARKER);
+    if (startIndex === -1 && anyEndIndex === -1) {
+        return 'missing-markers';
+    }
+
+    const matchingEndIndex = startIndex === -1
+        ? -1
+        : readme.indexOf(
+            README_TREE_END_MARKER,
+            startIndex + README_TREE_START_MARKER.length,
+        );
+    if (matchingEndIndex !== -1) {
         return 'ready';
     }
-    if (hasStartMarker || hasEndMarker) {
-        return 'incomplete-markers';
-    }
-    return 'missing-markers';
+    return 'incomplete-markers';
 }
 
 export async function inspectReadmeTreeBlock(
@@ -91,7 +98,7 @@ export async function ensureReadmeTreeBlock(
 
     const status = getSetupStatus(readme);
     if (status === 'incomplete-markers') {
-        throw new Error('Markdown target contains only one tree marker. Remove the incomplete marker and try again.');
+        throw new Error('Markdown target does not contain an ordered tree marker pair. Fix the markers and try again.');
     }
 
     if (status === 'ready') {

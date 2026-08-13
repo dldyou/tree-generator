@@ -7,7 +7,12 @@ import {
     updateReadmeTreeBlock,
 } from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
-import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
+import {
+    deleteTreeStateFile,
+    loadTreeStateFile,
+    saveTreeStateFile,
+    TREE_METADATA_FILE_NAME,
+} from './treeMetaStore';
 import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import {
     reorderChildren,
@@ -25,6 +30,19 @@ function cloneTree(node: TreeNode): TreeNode {
         ...node,
         children: node.children?.map(cloneTree),
     };
+}
+
+export function shouldScheduleFileTreeRefresh(
+    rootPath: string,
+    changedPath: string,
+): boolean {
+    if (path.basename(changedPath) === '.gitignore') {
+        return false;
+    }
+
+    const resolvedChangedPath = path.resolve(changedPath);
+    return resolvedChangedPath !== path.resolve(rootPath, '.tree-generatorignore')
+        && resolvedChangedPath !== path.resolve(rootPath, TREE_METADATA_FILE_NAME);
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -125,7 +143,7 @@ function getReadmeDiagnostic(
             };
         case 'incomplete-markers':
             return {
-                text: `${targetPath} contains only one tree marker. Remove the incomplete marker before setup.`,
+                text: `${targetPath} does not contain a valid start/end tree marker pair. Fix the markers before setup.`,
                 canSetup: false,
                 isError: true,
             };
@@ -329,10 +347,7 @@ function openTreeEditor(
     };
 
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
-        if (
-            path.basename(uri.fsPath) === '.gitignore'
-            || path.basename(uri.fsPath) === '.tree-generatorignore'
-        ) {
+        if (!shouldScheduleFileTreeRefresh(rootPath, uri.fsPath)) {
             return;
         }
 

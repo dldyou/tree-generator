@@ -56,7 +56,25 @@ suite('README target file', () => {
 			assert.strictEqual(await inspectReadmeTreeBlock(rootPath), 'incomplete-markers');
 			await assert.rejects(
 				ensureReadmeTreeBlock(rootPath, 'project/\n'),
-				/only one tree marker/,
+				/ordered tree marker pair/,
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('rejects an end marker that appears before the start marker', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(
+				path.join(rootPath, 'README.md'),
+				[README_TREE_END_MARKER, README_TREE_START_MARKER].join('\n'),
+			);
+			assert.strictEqual(await inspectReadmeTreeBlock(rootPath), 'incomplete-markers');
+			await assert.rejects(
+				ensureReadmeTreeBlock(rootPath, 'project/\n'),
+				/ordered tree marker pair/,
 			);
 		} finally {
 			await fs.rm(rootPath, { recursive: true, force: true });
