@@ -15,9 +15,10 @@ interface IgnoreScope {
 async function loadIgnoreScopes(
     dirPath: string,
     inheritedScopes: IgnoreScope[],
+    ignoreFileName: string,
 ): Promise<IgnoreScope[]> {
     try {
-        const patterns = await fs.readFile(path.join(dirPath, '.gitignore'), 'utf8');
+        const patterns = await fs.readFile(path.join(dirPath, ignoreFileName), 'utf8');
         return [
             ...inheritedScopes,
             {
@@ -60,12 +61,13 @@ function isIgnored(
 
 async function scanDirectoryWithScopes(
     dirPath: string,
+    treeIgnoreScopes: IgnoreScope[],
     inheritedScopes: IgnoreScope[],
     options: Required<ScanOptions>,
 ): Promise<TreeNode> {
     const name = path.basename(dirPath);
     const scopes = options.respectGitignore
-        ? await loadIgnoreScopes(dirPath, inheritedScopes)
+        ? await loadIgnoreScopes(dirPath, inheritedScopes, '.gitignore')
         : inheritedScopes;
 
     const root: TreeNode = {
@@ -81,12 +83,16 @@ async function scanDirectoryWithScopes(
             return false;
         }
 
-        return !options.respectGitignore
+        return !isIgnored(
+            path.join(dirPath, entry.name),
+            entry.isDirectory(),
+            treeIgnoreScopes,
+        ) && (!options.respectGitignore
             || !isIgnored(
                 path.join(dirPath, entry.name),
                 entry.isDirectory(),
                 scopes,
-            );
+            ));
     });
 
     filteredEntries.sort((a, b) => {
@@ -99,7 +105,12 @@ async function scanDirectoryWithScopes(
     for (const entry of filteredEntries) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-            const childNode = await scanDirectoryWithScopes(fullPath, scopes, options);
+            const childNode = await scanDirectoryWithScopes(
+                fullPath,
+                treeIgnoreScopes,
+                scopes,
+                options,
+            );
             root.children!.push(childNode);
         } else if (entry.isFile()) {
             root.children!.push({
@@ -117,7 +128,13 @@ export async function scanDirectory(
     dirPath: string,
     options: ScanOptions = {},
 ): Promise<TreeNode> {
-    return scanDirectoryWithScopes(dirPath, [], {
+    const treeIgnoreScopes = await loadIgnoreScopes(
+        dirPath,
+        [],
+        '.tree-generatorignore',
+    );
+
+    return scanDirectoryWithScopes(dirPath, treeIgnoreScopes, [], {
         respectGitignore: options.respectGitignore ?? true,
     });
 }

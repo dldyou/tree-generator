@@ -329,7 +329,10 @@ function openTreeEditor(
     };
 
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
-        if (path.basename(uri.fsPath) === '.gitignore') {
+        if (
+            path.basename(uri.fsPath) === '.gitignore'
+            || path.basename(uri.fsPath) === '.tree-generatorignore'
+        ) {
             return;
         }
 
@@ -339,6 +342,9 @@ function openTreeEditor(
     const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(rootPath, '**/.gitignore'),
     );
+    const treeIgnoreWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(rootPath, '.tree-generatorignore'),
+    );
     const fileTreeWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(rootPath, '**/*'),
     );
@@ -346,6 +352,9 @@ function openTreeEditor(
         gitignoreWatcher.onDidCreate(() => scheduleRefresh('.gitignore changed; tree refreshed')),
         gitignoreWatcher.onDidChange(() => scheduleRefresh('.gitignore changed; tree refreshed')),
         gitignoreWatcher.onDidDelete(() => scheduleRefresh('.gitignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidCreate(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidChange(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidDelete(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
         fileTreeWatcher.onDidCreate(scheduleFileTreeRefresh),
         fileTreeWatcher.onDidDelete(scheduleFileTreeRefresh),
         vscode.workspace.onDidChangeConfiguration(event => {
@@ -622,6 +631,7 @@ function openTreeEditor(
         messageDisposable.dispose();
         watcherDisposables.forEach(disposable => disposable.dispose());
         gitignoreWatcher.dispose();
+        treeIgnoreWatcher.dispose();
         fileTreeWatcher.dispose();
     });
     panel.webview.html = getTreeEditorHtml(panel.webview);
