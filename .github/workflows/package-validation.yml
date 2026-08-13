@@ -1,0 +1,23 @@
+name: Package Validation
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: [self-hosted]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm ci
+      - run: npm run compile
+      - run: npm run lint
+      - run: npm test
+      - run: npx @vscode/vsce package --no-dependencies
