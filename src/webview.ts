@@ -750,6 +750,9 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                     createBulkButton('Include all', node, false),
                     createBulkButton('Exclude all', node, true),
                 );
+                if (!isRoot) {
+                    actions.append(createDirectoryResetButton(node));
+                }
             }
             return actions;
         }
@@ -766,6 +769,22 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                     type: 'setDescendantsExcluded',
                     directoryPath: node.path,
                     excluded,
+                });
+            });
+            return button;
+        }
+
+        function createDirectoryResetButton(node) {
+            const button = document.createElement('button');
+            button.className = 'bulk-button';
+            button.type = 'button';
+            button.textContent = 'Reset';
+            button.title = 'Reset this directory to its default order and metadata';
+            button.addEventListener('click', event => {
+                event.stopPropagation();
+                vscode.postMessage({
+                    type: 'resetDirectory',
+                    directoryPath: node.path,
                 });
             });
             return button;

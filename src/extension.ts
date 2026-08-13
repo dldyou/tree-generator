@@ -11,6 +11,7 @@ import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './tre
 import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import {
     reorderChildren,
+    resetDirectory,
     setDescendantsExcluded,
     setNodeDescription,
     setNodeExcluded,
@@ -564,6 +565,23 @@ function openTreeEditor(
                     tree = defaultTree;
                     recordMutation(treeBeforeReset);
                     await sendUpdate('Default order restored');
+                    break;
+                case 'resetDirectory':
+                    if (typeof message.directoryPath !== 'string') {
+                        break;
+                    }
+                    const treeBeforeDirectoryReset = cloneTree(tree);
+                    if (!resetDirectory(tree, message.directoryPath)) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not reset that directory.',
+                            isError: true,
+                        });
+                        break;
+                    }
+                    recordMutation(treeBeforeDirectoryReset);
+                    await saveTree();
+                    await sendUpdate('Directory restored to default');
                     break;
                 case 'undo':
                     const previousTree = undoStack.pop();
