@@ -2,7 +2,7 @@
 
 Tree Generator is a VS Code extension for visually editing a project tree and keeping it in a Markdown document.
 
-![Tree Generator Webview](images/image.png)
+![Tree Generator Webview](images/image-v.0.4.0.png)
 
 ```text
 tree-generator/
