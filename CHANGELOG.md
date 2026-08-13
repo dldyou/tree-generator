@@ -2,6 +2,18 @@
 
 Notable changes to Tree Generator are listed by release.
 
+## [0.4.0] - 2026-08-13
+
+### Added
+
+- Extension icon and Marketplace package metadata.
+- Markdown target diagnostics and one-click tree block setup.
+- Markdown target, output style, and maximum depth controls in the Webview.
+- Undo and redo for tree ordering, exclusions, descriptions, and bulk actions.
+- Root `.tree-generatorignore` support independent of `.gitignore` settings.
+- Directory-level metadata reset.
+- Package validation workflow for a self-hosted GitHub Actions runner.
+
 ## [0.3.0] - 2026-08-12
 
 ### Added

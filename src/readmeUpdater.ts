@@ -14,6 +14,12 @@ export interface ReadmeCheckResult {
     matches: boolean;
 }
 
+export type ReadmeSetupStatus =
+    | 'ready'
+    | 'missing-file'
+    | 'missing-markers'
+    | 'incomplete-markers';
+
 function resolveReadmePath(rootPath: string, targetPath = 'README.md'): string {
     if (path.isAbsolute(targetPath)) {
         throw new Error('README target path must be relative and within the root path.');
@@ -37,6 +43,77 @@ export function renderReadmeTreeBlock(treeString: string): string {
         '```',
         README_TREE_END_MARKER,
     ].join('\n');
+}
+
+function getSetupStatus(readme: string): ReadmeSetupStatus {
+    const startIndex = readme.indexOf(README_TREE_START_MARKER);
+    const anyEndIndex = readme.indexOf(README_TREE_END_MARKER);
+    if (startIndex === -1 && anyEndIndex === -1) {
+        return 'missing-markers';
+    }
+
+    const matchingEndIndex = startIndex === -1
+        ? -1
+        : readme.indexOf(
+            README_TREE_END_MARKER,
+            startIndex + README_TREE_START_MARKER.length,
+        );
+    if (matchingEndIndex !== -1) {
+        return 'ready';
+    }
+    return 'incomplete-markers';
+}
+
+export async function inspectReadmeTreeBlock(
+    rootPath: string,
+    targetPath?: string,
+): Promise<ReadmeSetupStatus> {
+    try {
+        return getSetupStatus(
+            await fs.readFile(resolveReadmePath(rootPath, targetPath), 'utf8'),
+        );
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+            return 'missing-file';
+        }
+        throw error;
+    }
+}
+
+export async function ensureReadmeTreeBlock(
+    rootPath: string,
+    treeString: string,
+    targetPath?: string,
+): Promise<void> {
+    const target = resolveReadmePath(rootPath, targetPath);
+    let readme = '';
+    try {
+        readme = await fs.readFile(target, 'utf8');
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+            throw error;
+        }
+        await fs.mkdir(path.dirname(target), { recursive: true });
+    }
+
+    const status = getSetupStatus(readme);
+    if (status === 'incomplete-markers') {
+        throw new Error('Markdown target does not contain an ordered tree marker pair. Fix the markers and try again.');
+    }
+
+    if (status === 'ready') {
+        await updateReadmeTreeBlock(rootPath, treeString, targetPath);
+        return;
+    }
+
+    const separator = readme.length === 0 || readme.endsWith('\n\n')
+        ? ''
+        : readme.endsWith('\n') ? '\n' : '\n\n';
+    await fs.writeFile(
+        target,
+        `${readme}${separator}${renderReadmeTreeBlock(treeString)}\n`,
+        'utf8',
+    );
 }
 
 export function replaceReadmeTreeBlock(

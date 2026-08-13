@@ -1,11 +1,22 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { updateReadmeTreeBlock } from './readmeUpdater';
+import {
+    ensureReadmeTreeBlock,
+    inspectReadmeTreeBlock,
+    ReadmeSetupStatus,
+    updateReadmeTreeBlock,
+} from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
-import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
+import {
+    deleteTreeStateFile,
+    loadTreeStateFile,
+    saveTreeStateFile,
+    TREE_METADATA_FILE_NAME,
+} from './treeMetaStore';
 import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
 import {
     reorderChildren,
+    resetDirectory,
     setDescendantsExcluded,
     setNodeDescription,
     setNodeExcluded,
@@ -13,6 +24,26 @@ import {
 import { applyTreeState, captureTreeState, PersistedTreeState } from './treeState';
 import { TreeNode } from './types';
 import { getTreeEditorHtml } from './webview';
+
+function cloneTree(node: TreeNode): TreeNode {
+    return {
+        ...node,
+        children: node.children?.map(cloneTree),
+    };
+}
+
+export function shouldScheduleFileTreeRefresh(
+    rootPath: string,
+    changedPath: string,
+): boolean {
+    if (path.basename(changedPath) === '.gitignore') {
+        return false;
+    }
+
+    const resolvedChangedPath = path.resolve(changedPath);
+    return resolvedChangedPath !== path.resolve(rootPath, '.tree-generatorignore')
+        && resolvedChangedPath !== path.resolve(rootPath, TREE_METADATA_FILE_NAME);
+}
 
 export function activate(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('tree-generator.generateTree', async () => {
@@ -92,6 +123,41 @@ function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
     };
 }
 
+function getReadmeDiagnostic(
+    status: ReadmeSetupStatus,
+    autoUpdateReadme: boolean,
+    targetPath: string,
+): { text: string; canSetup: boolean; isError: boolean } {
+    switch (status) {
+        case 'missing-file':
+            return {
+                text: `${targetPath} does not exist. Set it up to create the Markdown tree block.`,
+                canSetup: true,
+                isError: false,
+            };
+        case 'missing-markers':
+            return {
+                text: `${targetPath} has no tree markers, so automatic updates cannot run.`,
+                canSetup: true,
+                isError: false,
+            };
+        case 'incomplete-markers':
+            return {
+                text: `${targetPath} does not contain a valid start/end tree marker pair. Fix the markers before setup.`,
+                canSetup: false,
+                isError: true,
+            };
+        default:
+            return {
+                text: autoUpdateReadme
+                    ? `${targetPath} is ready for automatic updates.`
+                    : 'Automatic Markdown updates are disabled.',
+                canSetup: false,
+                isError: false,
+            };
+    }
+}
+
 async function loadSavedTreeState(
     context: vscode.ExtensionContext,
     rootPath: string,
@@ -133,22 +199,49 @@ function openTreeEditor(
     let scanOptions = initialScanOptions;
     let refreshTimer: NodeJS.Timeout | undefined;
     let pendingRefreshStatus = 'Tree refreshed';
+    const undoStack: TreeNode[] = [];
+    const redoStack: TreeNode[] = [];
+
+    const recordMutation = (previousTree: TreeNode): void => {
+        undoStack.push(previousTree);
+        if (undoStack.length > 50) {
+            undoStack.shift();
+        }
+        redoStack.length = 0;
+    };
 
     const saveTree = async (): Promise<void> => {
         await saveTreeStateFile(rootPath, captureTreeState(tree));
     };
 
     const sendUpdate = async (status?: string): Promise<void> => {
-        const treeString = generateTreeString(tree, getGeneratorOptions(rootPath));
+        const generatorOptions = getGeneratorOptions(rootPath);
+        const treeString = generateTreeString(tree, generatorOptions);
         let readmeUpdateError: string | undefined;
 
         const autoUpdateReadme = getAutoUpdateReadme(rootPath);
+        const readmePath = getReadmePath(rootPath);
         if (autoUpdateReadme) {
             try {
-                await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
+                await updateReadmeTreeBlock(rootPath, treeString, readmePath);
             } catch (error) {
                 readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
             }
+        }
+
+        let readmeDiagnostic;
+        try {
+            readmeDiagnostic = getReadmeDiagnostic(
+                await inspectReadmeTreeBlock(rootPath, readmePath),
+                autoUpdateReadme,
+                readmePath,
+            );
+        } catch (error) {
+            readmeDiagnostic = {
+                text: `Could not inspect ${readmePath}: ${String(error)}`,
+                canSetup: false,
+                isError: true,
+            };
         }
 
         await panel.webview.postMessage({
@@ -157,6 +250,12 @@ function openTreeEditor(
             treeString,
             respectGitignore: scanOptions.respectGitignore,
             autoUpdateReadme,
+            readmeDiagnostic,
+            readmePath,
+            outputStyle: generatorOptions.style ?? 'unicode',
+            maxDepth: generatorOptions.maxDepth ?? -1,
+            canUndo: undoStack.length > 0,
+            canRedo: redoStack.length > 0,
             status,
         });
 
@@ -178,6 +277,8 @@ function openTreeEditor(
             }
 
             tree = refreshedTree;
+            undoStack.length = 0;
+            redoStack.length = 0;
             await sendUpdate(status);
         } catch (error) {
             await panel.webview.postMessage({
@@ -219,8 +320,34 @@ function openTreeEditor(
             );
     };
 
+    const updateOutputSettings = async (
+        readmePath: string,
+        outputStyle: 'unicode' | 'ascii',
+        maxDepth: number,
+    ): Promise<void> => {
+        const configuration = vscode.workspace.getConfiguration(
+            'tree-generator',
+            vscode.Uri.file(rootPath),
+        );
+        await configuration.update(
+            'readmePath',
+            readmePath,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
+        await configuration.update(
+            'outputStyle',
+            outputStyle,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
+        await configuration.update(
+            'maxDepth',
+            maxDepth,
+            vscode.ConfigurationTarget.WorkspaceFolder,
+        );
+    };
+
     const scheduleFileTreeRefresh = (uri: vscode.Uri): void => {
-        if (path.basename(uri.fsPath) === '.gitignore') {
+        if (!shouldScheduleFileTreeRefresh(rootPath, uri.fsPath)) {
             return;
         }
 
@@ -230,6 +357,9 @@ function openTreeEditor(
     const gitignoreWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(rootPath, '**/.gitignore'),
     );
+    const treeIgnoreWatcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(rootPath, '.tree-generatorignore'),
+    );
     const fileTreeWatcher = vscode.workspace.createFileSystemWatcher(
         new vscode.RelativePattern(rootPath, '**/*'),
     );
@@ -237,6 +367,9 @@ function openTreeEditor(
         gitignoreWatcher.onDidCreate(() => scheduleRefresh('.gitignore changed; tree refreshed')),
         gitignoreWatcher.onDidChange(() => scheduleRefresh('.gitignore changed; tree refreshed')),
         gitignoreWatcher.onDidDelete(() => scheduleRefresh('.gitignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidCreate(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidChange(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
+        treeIgnoreWatcher.onDidDelete(() => scheduleRefresh('.tree-generatorignore changed; tree refreshed')),
         fileTreeWatcher.onDidCreate(scheduleFileTreeRefresh),
         fileTreeWatcher.onDidDelete(scheduleFileTreeRefresh),
         vscode.workspace.onDidChangeConfiguration(event => {
@@ -291,6 +424,7 @@ function openTreeEditor(
                     await sendUpdate();
                     break;
                 case 'reorder':
+                    const treeBeforeReorder = cloneTree(tree);
                     if (
                         typeof message.parentPath !== 'string'
                         || !Array.isArray(message.orderedChildPaths)
@@ -308,10 +442,12 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeReorder);
                     await saveTree();
                     await sendUpdate('Order updated');
                     break;
                 case 'setExcluded':
+                    const treeBeforeExclusion = cloneTree(tree);
                     if (
                         typeof message.nodePath !== 'string'
                         || typeof message.excluded !== 'boolean'
@@ -326,6 +462,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeExclusion);
                     await saveTree();
                     await sendUpdate(
                         message.excluded
@@ -334,6 +471,7 @@ function openTreeEditor(
                     );
                     break;
                 case 'setDescendantsExcluded':
+                    const treeBeforeBulkExclusion = cloneTree(tree);
                     if (
                         typeof message.directoryPath !== 'string'
                         || typeof message.excluded !== 'boolean'
@@ -351,6 +489,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeBulkExclusion);
                     await saveTree();
                     await sendUpdate(
                         message.excluded
@@ -359,6 +498,7 @@ function openTreeEditor(
                     );
                     break;
                 case 'setDescription':
+                    const treeBeforeDescription = cloneTree(tree);
                     if (
                         typeof message.nodePath !== 'string'
                         || typeof message.description !== 'string'
@@ -373,6 +513,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeDescription);
                     await saveTree();
                     await sendUpdate('Description updated');
                     break;
@@ -400,6 +541,37 @@ function openTreeEditor(
 
                     await updateAutoUpdateReadme(message.autoUpdateReadme);
                     break;
+                case 'setupMarkdown':
+                    await ensureReadmeTreeBlock(
+                        rootPath,
+                        generateTreeString(tree, getGeneratorOptions(rootPath)),
+                        getReadmePath(rootPath),
+                    );
+                    await sendUpdate('Markdown tree block created');
+                    break;
+                case 'setOutputSettings':
+                    if (
+                        typeof message.readmePath !== 'string'
+                        || message.readmePath.trim().length === 0
+                        || (message.outputStyle !== 'unicode' && message.outputStyle !== 'ascii')
+                        || !Number.isInteger(message.maxDepth)
+                        || message.maxDepth < -1
+                    ) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not update output settings.',
+                            isError: true,
+                        });
+                        break;
+                    }
+
+                    await updateOutputSettings(
+                        message.readmePath.trim(),
+                        message.outputStyle,
+                        message.maxDepth,
+                    );
+                    await sendUpdate('Output settings updated');
+                    break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(
                         generateTreeString(tree, getGeneratorOptions(rootPath)),
@@ -410,10 +582,52 @@ function openTreeEditor(
                     });
                     break;
                 case 'reset':
+                    const treeBeforeReset = cloneTree(tree);
+                    const defaultTree = await scanDirectory(rootPath, scanOptions);
                     await deleteTreeStateFile(rootPath);
                     await context.workspaceState.update(stateKey, undefined);
-                    tree = await scanDirectory(rootPath, scanOptions);
+                    tree = defaultTree;
+                    recordMutation(treeBeforeReset);
                     await sendUpdate('Default order restored');
+                    break;
+                case 'resetDirectory':
+                    if (typeof message.directoryPath !== 'string') {
+                        break;
+                    }
+                    const treeBeforeDirectoryReset = cloneTree(tree);
+                    if (!resetDirectory(tree, message.directoryPath)) {
+                        await panel.webview.postMessage({
+                            type: 'status',
+                            text: 'Could not reset that directory.',
+                            isError: true,
+                        });
+                        break;
+                    }
+                    recordMutation(treeBeforeDirectoryReset);
+                    await saveTree();
+                    await sendUpdate('Directory restored to default');
+                    break;
+                case 'undo':
+                    const previousTree = undoStack.pop();
+                    if (!previousTree) {
+                        await sendUpdate();
+                        break;
+                    }
+                    redoStack.push(cloneTree(tree));
+                    tree = previousTree;
+                    await saveTree();
+                    await sendUpdate('Change undone');
+                    break;
+                case 'redo':
+                    const nextTree = redoStack.pop();
+                    if (!nextTree) {
+                        await sendUpdate();
+                        break;
+                    }
+                    undoStack.push(cloneTree(tree));
+                    tree = nextTree;
+                    await saveTree();
+                    await sendUpdate('Change restored');
                     break;
             }
         } catch (error) {
@@ -432,6 +646,7 @@ function openTreeEditor(
         messageDisposable.dispose();
         watcherDisposables.forEach(disposable => disposable.dispose());
         gitignoreWatcher.dispose();
+        treeIgnoreWatcher.dispose();
         fileTreeWatcher.dispose();
     });
     panel.webview.html = getTreeEditorHtml(panel.webview);

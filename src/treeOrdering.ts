@@ -128,3 +128,31 @@ export function setNodeDescription(
     node.description = normalizedDescription || undefined;
     return true;
 }
+
+export function resetDirectory(
+    root: TreeNode,
+    directoryPath: string,
+): boolean {
+    const directory = findNode(root, directoryPath)?.node;
+    if (!directory || directory.type !== 'directory') {
+        return false;
+    }
+
+    const resetNode = (node: TreeNode): void => {
+        node.excluded = undefined;
+        node.description = undefined;
+        for (const child of node.children ?? []) {
+            child.excluded = undefined;
+            resetNode(child);
+        }
+        node.children?.sort((a, b) => {
+            if (a.type !== b.type) {
+                return a.type === 'directory' ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+    };
+
+    resetNode(directory);
+    return true;
+}
