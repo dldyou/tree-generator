@@ -18,8 +18,11 @@ tree-generator/
 - Directory-first alphabetical scanning with `.gitignore` support.
 - Drag-and-drop ordering, descriptions, and manual exclusions.
 - Search and directory-wide include or exclude actions.
-- Automatic refresh when files, folders, or `.gitignore` files change.
+- Undo and redo for tree editing, plus per-directory reset.
+- Automatic refresh when files, folders, or ignore files change.
 - Unicode or ASCII output with an optional maximum depth.
+- Output settings and Markdown setup diagnostics in the Webview.
+- Tree-only exclusions through a root `.tree-generatorignore` file.
 - Project metadata persistence in `.tree-generator.json`.
 - Multi-root workspace folder selection.
 
@@ -27,9 +30,9 @@ tree-generator/
 
 1. Install [Tree Generator](https://marketplace.visualstudio.com/items?itemName=dldyou.tree-generator-dldyou) and open a workspace.
 2. Run `Tree Generator: Open Tree Editor` from the Command Palette.
-3. Edit the tree, then copy the preview or enable automatic Markdown updates.
+3. Edit the tree, configure the output, then copy the preview or enable automatic Markdown updates.
 
-To update a Markdown file automatically, add this block after removing the backslashes from the comments:
+Use **Set up Markdown** in the editor to create the target file or append the required tree block. The generated block has this form:
 
 ````md
 <\!-- tree-generator:start -->

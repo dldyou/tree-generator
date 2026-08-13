@@ -2,7 +2,7 @@
   "name": "tree-generator-dldyou",
   "displayName": "Tree Generator",
   "description": "Generate project tree for README.md",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/dldyou/tree-generator.git"
