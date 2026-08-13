@@ -2,7 +2,11 @@ name: Package Validation
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -16,8 +20,19 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install VS Code test dependencies
+        if: runner.os == 'Linux'
+        run: |
+          if ! dpkg -s libgbm1 xvfb >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y libgbm1 xvfb
+          fi
+
       - run: npm ci
       - run: npm run compile
       - run: npm run lint
+      - run: xvfb-run -a npm test
+        if: runner.os == 'Linux'
       - run: npm test
+        if: runner.os != 'Linux'
       - run: npx @vscode/vsce package --no-dependencies
