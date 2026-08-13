@@ -4,6 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import {
 	checkReadmeTreeBlock,
+	ensureReadmeTreeBlock,
+	inspectReadmeTreeBlock,
 	README_TREE_END_MARKER,
 	README_TREE_START_MARKER,
 	updateReadmeTreeBlock,
@@ -11,6 +13,56 @@ import {
 import { runCli } from '../cli';
 
 suite('README target file', () => {
+	test('creates a missing target file with tree markers', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			assert.strictEqual(
+				await inspectReadmeTreeBlock(rootPath, 'docs/structure.md'),
+				'missing-file',
+			);
+			await ensureReadmeTreeBlock(rootPath, 'project/\n', 'docs/structure.md');
+			const content = await fs.readFile(path.join(rootPath, 'docs', 'structure.md'), 'utf8');
+			assert.ok(content.includes(README_TREE_START_MARKER));
+			assert.ok(content.includes(README_TREE_END_MARKER));
+			assert.strictEqual(
+				await inspectReadmeTreeBlock(rootPath, 'docs/structure.md'),
+				'ready',
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('appends markers without replacing existing Markdown', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, 'README.md'), '# Project\n');
+			await ensureReadmeTreeBlock(rootPath, 'project/\n');
+			const content = await fs.readFile(path.join(rootPath, 'README.md'), 'utf8');
+			assert.ok(content.startsWith('# Project\n'));
+			assert.ok(content.includes(README_TREE_START_MARKER));
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	test('reports incomplete marker pairs', async () => {
+		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
+
+		try {
+			await fs.writeFile(path.join(rootPath, 'README.md'), README_TREE_START_MARKER);
+			assert.strictEqual(await inspectReadmeTreeBlock(rootPath), 'incomplete-markers');
+			await assert.rejects(
+				ensureReadmeTreeBlock(rootPath, 'project/\n'),
+				/only one tree marker/,
+			);
+		} finally {
+			await fs.rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
 	test('updates nested targets, defaults to README.md, and rejects unsafe paths', async () => {
 		const rootPath = await fs.mkdtemp(path.join(os.tmpdir(), 'tree-generator-'));
 		const nestedReadmePath = path.join(rootPath, 'docs', 'guide.md');

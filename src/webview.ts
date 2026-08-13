@@ -288,6 +288,19 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             color: var(--vscode-errorForeground);
         }
 
+        .diagnostic {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 28px;
+            margin: -4px 0 12px;
+            color: var(--vscode-descriptionForeground);
+        }
+
+        .diagnostic.error {
+            color: var(--vscode-errorForeground);
+        }
+
         @media (max-width: 760px) {
             .layout {
                 grid-template-columns: 1fr;
@@ -310,6 +323,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         </label>
         <span id="status" class="status" role="status"></span>
     </div>
+    <div id="markdown-diagnostic" class="diagnostic">
+        <span id="markdown-diagnostic-text"></span>
+        <button id="setup-markdown-button" class="secondary" type="button" hidden>Set up Markdown</button>
+    </div>
     <p class="hint">Add descriptions, drag items to change their order, or exclude them from the output. Descriptions are aligned as # comments in the preview.</p>
     <main class="layout">
         <section class="panel">
@@ -329,6 +346,9 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const statusElement = document.getElementById('status');
         const respectGitignoreCheckbox = document.getElementById('respect-gitignore-checkbox');
         const autoUpdateReadmeCheckbox = document.getElementById('auto-update-readme-checkbox');
+        const markdownDiagnosticElement = document.getElementById('markdown-diagnostic');
+        const markdownDiagnosticText = document.getElementById('markdown-diagnostic-text');
+        const setupMarkdownButton = document.getElementById('setup-markdown-button');
         const searchInput = document.getElementById('search-input');
         const collapsedPaths = new Set();
         let matchingPaths = new Set();
@@ -363,6 +383,11 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
             });
         });
 
+        setupMarkdownButton.addEventListener('click', () => {
+            setStatus('Setting up Markdown...');
+            vscode.postMessage({ type: 'setupMarkdown' });
+        });
+
         searchInput.addEventListener('input', renderTree);
 
         window.addEventListener('message', event => {
@@ -373,6 +398,10 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 previewElement.textContent = message.treeString;
                 respectGitignoreCheckbox.checked = Boolean(message.respectGitignore);
                 autoUpdateReadmeCheckbox.checked = Boolean(message.autoUpdateReadme);
+                const diagnostic = message.readmeDiagnostic;
+                markdownDiagnosticText.textContent = diagnostic?.text ?? '';
+                markdownDiagnosticElement.classList.toggle('error', Boolean(diagnostic?.isError));
+                setupMarkdownButton.hidden = !diagnostic?.canSetup;
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {

@@ -1,6 +1,11 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { updateReadmeTreeBlock } from './readmeUpdater';
+import {
+    ensureReadmeTreeBlock,
+    inspectReadmeTreeBlock,
+    ReadmeSetupStatus,
+    updateReadmeTreeBlock,
+} from './readmeUpdater';
 import { scanDirectory, ScanOptions } from './scanner';
 import { deleteTreeStateFile, loadTreeStateFile, saveTreeStateFile } from './treeMetaStore';
 import { generateTreeString, TreeGeneratorOptions } from './treeGenerator';
@@ -92,6 +97,41 @@ function getGeneratorOptions(rootPath: string): TreeGeneratorOptions {
     };
 }
 
+function getReadmeDiagnostic(
+    status: ReadmeSetupStatus,
+    autoUpdateReadme: boolean,
+    targetPath: string,
+): { text: string; canSetup: boolean; isError: boolean } {
+    switch (status) {
+        case 'missing-file':
+            return {
+                text: `${targetPath} does not exist. Set it up to create the Markdown tree block.`,
+                canSetup: true,
+                isError: false,
+            };
+        case 'missing-markers':
+            return {
+                text: `${targetPath} has no tree markers, so automatic updates cannot run.`,
+                canSetup: true,
+                isError: false,
+            };
+        case 'incomplete-markers':
+            return {
+                text: `${targetPath} contains only one tree marker. Remove the incomplete marker before setup.`,
+                canSetup: false,
+                isError: true,
+            };
+        default:
+            return {
+                text: autoUpdateReadme
+                    ? `${targetPath} is ready for automatic updates.`
+                    : 'Automatic Markdown updates are disabled.',
+                canSetup: false,
+                isError: false,
+            };
+    }
+}
+
 async function loadSavedTreeState(
     context: vscode.ExtensionContext,
     rootPath: string,
@@ -143,12 +183,28 @@ function openTreeEditor(
         let readmeUpdateError: string | undefined;
 
         const autoUpdateReadme = getAutoUpdateReadme(rootPath);
+        const readmePath = getReadmePath(rootPath);
         if (autoUpdateReadme) {
             try {
-                await updateReadmeTreeBlock(rootPath, treeString, getReadmePath(rootPath));
+                await updateReadmeTreeBlock(rootPath, treeString, readmePath);
             } catch (error) {
                 readmeUpdateError = `Failed to update markdown file: ${String(error)}`;
             }
+        }
+
+        let readmeDiagnostic;
+        try {
+            readmeDiagnostic = getReadmeDiagnostic(
+                await inspectReadmeTreeBlock(rootPath, readmePath),
+                autoUpdateReadme,
+                readmePath,
+            );
+        } catch (error) {
+            readmeDiagnostic = {
+                text: `Could not inspect ${readmePath}: ${String(error)}`,
+                canSetup: false,
+                isError: true,
+            };
         }
 
         await panel.webview.postMessage({
@@ -157,6 +213,7 @@ function openTreeEditor(
             treeString,
             respectGitignore: scanOptions.respectGitignore,
             autoUpdateReadme,
+            readmeDiagnostic,
             status,
         });
 
@@ -399,6 +456,14 @@ function openTreeEditor(
                     }
 
                     await updateAutoUpdateReadme(message.autoUpdateReadme);
+                    break;
+                case 'setupMarkdown':
+                    await ensureReadmeTreeBlock(
+                        rootPath,
+                        generateTreeString(tree, getGeneratorOptions(rootPath)),
+                        getReadmePath(rootPath),
+                    );
+                    await sendUpdate('Markdown tree block created');
                     break;
                 case 'copy':
                     await vscode.env.clipboard.writeText(
