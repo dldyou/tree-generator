@@ -340,6 +340,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 <body>
     <div class="toolbar">
         <button id="copy-button" type="button">Copy tree</button>
+        <button id="undo-button" class="secondary" type="button" disabled>Undo</button>
+        <button id="redo-button" class="secondary" type="button" disabled>Redo</button>
         <button id="reset-button" class="secondary" type="button">Reset to default</button>
         <input id="search-input" class="search-input" type="search" placeholder="Search files and folders" aria-label="Search files and folders" aria-controls="tree">
         <label class="toolbar-option" title="Exclude files and folders matched by .gitignore rules">
@@ -395,6 +397,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
         const readmePathInput = document.getElementById('readme-path-input');
         const outputStyleSelect = document.getElementById('output-style-select');
         const maxDepthInput = document.getElementById('max-depth-input');
+        const undoButton = document.getElementById('undo-button');
+        const redoButton = document.getElementById('redo-button');
         const searchInput = document.getElementById('search-input');
         const collapsedPaths = new Set();
         let matchingPaths = new Set();
@@ -406,6 +410,20 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
 
         document.getElementById('copy-button').addEventListener('click', () => {
             vscode.postMessage({ type: 'copy' });
+        });
+
+        undoButton.addEventListener('click', () => vscode.postMessage({ type: 'undo' }));
+        redoButton.addEventListener('click', () => vscode.postMessage({ type: 'redo' }));
+
+        document.addEventListener('keydown', event => {
+            if (!(event.ctrlKey || event.metaKey) || event.key.toLocaleLowerCase() !== 'z') {
+                return;
+            }
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) {
+                return;
+            }
+            event.preventDefault();
+            vscode.postMessage({ type: event.shiftKey ? 'redo' : 'undo' });
         });
 
         document.getElementById('reset-button').addEventListener('click', () => {
@@ -470,6 +488,8 @@ export function getTreeEditorHtml(webview: vscode.Webview): string {
                 readmePathInput.value = message.readmePath ?? 'README.md';
                 outputStyleSelect.value = message.outputStyle ?? 'unicode';
                 maxDepthInput.value = String(message.maxDepth ?? -1);
+                undoButton.disabled = !message.canUndo;
+                redoButton.disabled = !message.canRedo;
                 renderTree();
                 setStatus(message.status ?? '');
             } else if (message.type === 'status') {

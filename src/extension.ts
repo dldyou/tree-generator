@@ -19,6 +19,13 @@ import { applyTreeState, captureTreeState, PersistedTreeState } from './treeStat
 import { TreeNode } from './types';
 import { getTreeEditorHtml } from './webview';
 
+function cloneTree(node: TreeNode): TreeNode {
+    return {
+        ...node,
+        children: node.children?.map(cloneTree),
+    };
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('tree-generator.generateTree', async () => {
         const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -173,6 +180,16 @@ function openTreeEditor(
     let scanOptions = initialScanOptions;
     let refreshTimer: NodeJS.Timeout | undefined;
     let pendingRefreshStatus = 'Tree refreshed';
+    const undoStack: TreeNode[] = [];
+    const redoStack: TreeNode[] = [];
+
+    const recordMutation = (previousTree: TreeNode): void => {
+        undoStack.push(previousTree);
+        if (undoStack.length > 50) {
+            undoStack.shift();
+        }
+        redoStack.length = 0;
+    };
 
     const saveTree = async (): Promise<void> => {
         await saveTreeStateFile(rootPath, captureTreeState(tree));
@@ -218,6 +235,8 @@ function openTreeEditor(
             readmePath,
             outputStyle: generatorOptions.style ?? 'unicode',
             maxDepth: generatorOptions.maxDepth ?? -1,
+            canUndo: undoStack.length > 0,
+            canRedo: redoStack.length > 0,
             status,
         });
 
@@ -239,6 +258,8 @@ function openTreeEditor(
             }
 
             tree = refreshedTree;
+            undoStack.length = 0;
+            redoStack.length = 0;
             await sendUpdate(status);
         } catch (error) {
             await panel.webview.postMessage({
@@ -378,6 +399,7 @@ function openTreeEditor(
                     await sendUpdate();
                     break;
                 case 'reorder':
+                    const treeBeforeReorder = cloneTree(tree);
                     if (
                         typeof message.parentPath !== 'string'
                         || !Array.isArray(message.orderedChildPaths)
@@ -395,10 +417,12 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeReorder);
                     await saveTree();
                     await sendUpdate('Order updated');
                     break;
                 case 'setExcluded':
+                    const treeBeforeExclusion = cloneTree(tree);
                     if (
                         typeof message.nodePath !== 'string'
                         || typeof message.excluded !== 'boolean'
@@ -413,6 +437,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeExclusion);
                     await saveTree();
                     await sendUpdate(
                         message.excluded
@@ -421,6 +446,7 @@ function openTreeEditor(
                     );
                     break;
                 case 'setDescendantsExcluded':
+                    const treeBeforeBulkExclusion = cloneTree(tree);
                     if (
                         typeof message.directoryPath !== 'string'
                         || typeof message.excluded !== 'boolean'
@@ -438,6 +464,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeBulkExclusion);
                     await saveTree();
                     await sendUpdate(
                         message.excluded
@@ -446,6 +473,7 @@ function openTreeEditor(
                     );
                     break;
                 case 'setDescription':
+                    const treeBeforeDescription = cloneTree(tree);
                     if (
                         typeof message.nodePath !== 'string'
                         || typeof message.description !== 'string'
@@ -460,6 +488,7 @@ function openTreeEditor(
                         break;
                     }
 
+                    recordMutation(treeBeforeDescription);
                     await saveTree();
                     await sendUpdate('Description updated');
                     break;
@@ -528,10 +557,35 @@ function openTreeEditor(
                     });
                     break;
                 case 'reset':
+                    const treeBeforeReset = cloneTree(tree);
+                    const defaultTree = await scanDirectory(rootPath, scanOptions);
                     await deleteTreeStateFile(rootPath);
                     await context.workspaceState.update(stateKey, undefined);
-                    tree = await scanDirectory(rootPath, scanOptions);
+                    tree = defaultTree;
+                    recordMutation(treeBeforeReset);
                     await sendUpdate('Default order restored');
+                    break;
+                case 'undo':
+                    const previousTree = undoStack.pop();
+                    if (!previousTree) {
+                        await sendUpdate();
+                        break;
+                    }
+                    redoStack.push(cloneTree(tree));
+                    tree = previousTree;
+                    await saveTree();
+                    await sendUpdate('Change undone');
+                    break;
+                case 'redo':
+                    const nextTree = redoStack.pop();
+                    if (!nextTree) {
+                        await sendUpdate();
+                        break;
+                    }
+                    undoStack.push(cloneTree(tree));
+                    tree = nextTree;
+                    await saveTree();
+                    await sendUpdate('Change restored');
                     break;
             }
         } catch (error) {
